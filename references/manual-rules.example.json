@@ -1,0 +1,55 @@
+{
+  "fallback_domain": "其他",
+  "fallback_tag": "domain/misc",
+  "rules": [
+    {
+      "domain": "AI/编程助手",
+      "tag": "domain/ai-coding-assistant",
+      "keywords": ["claude code", "cursor", "copilot", "aider", "vibe coding"]
+    },
+    {
+      "domain": "AI/Agent与自动化",
+      "tag": "domain/ai-agent-automation",
+      "keywords": ["agent", "mcp", "workflow", "hook", "n8n", "zapier", "自动化"]
+    },
+    {
+      "domain": "AI/模型与提示词",
+      "tag": "domain/ai-model-prompt",
+      "keywords": ["prompt", "提示词", "system prompt", "token", "rag"]
+    },
+    {
+      "domain": "AI/图像与视频",
+      "tag": "domain/ai-image-video",
+      "keywords": ["midjourney", "comfyui", "runway", "sora", "图像生成", "视频生成", "文生图"]
+    },
+    {
+      "domain": "技术与开发/编程与开源",
+      "tag": "domain/technology",
+      "keywords": ["github", "git", "repo", "python", "javascript", "rust", "go", "开源"]
+    },
+    {
+      "domain": "学习与教育/英语与语言",
+      "tag": "domain/learning-education",
+      "keywords": ["学习", "雅思", "英语", "ielts", "课程", "教程"]
+    },
+    {
+      "domain": "金融与投资/市场与资产",
+      "tag": "domain/finance-investing",
+      "keywords": ["投资", "财经", "金融", "bitcoin", "btc", "crypto"]
+    }
+  ],
+  "topic_rules": [
+    {
+      "tag": "topic/obsidian",
+      "keywords": ["obsidian"]
+    },
+    {
+      "tag": "topic/github",
+      "keywords": ["github", "开源", "repo"]
+    },
+    {
+      "tag": "topic/apple",
+      "keywords": ["ios", "iphone", "mac", "apple"]
+    }
+  ]
+}
