@@ -1,0 +1,4 @@
+interface:
+  display_name: "Convert X Likes to Markdown"
+  short_description: "Convert X likes JSON into local classified Markdown with merge/create and zh/en title output"
+  default_prompt: "Use $convert-x-likes-to-markdown to convert X likes JSON into local Markdown with semantic classification and indexes. Ask user to choose merge/create, auto/manual, and title language (en or zh) before running."
