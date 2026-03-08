@@ -53,6 +53,29 @@ convert-x-likes-to-markdown/
 
 No external Python dependencies are required.
 
+## How To Get The Input JSON
+
+This project expects you to bring your own exported JSON file first.
+
+The recommended upstream exporter is:
+
+- [prinsss/twitter-web-exporter](https://github.com/prinsss/twitter-web-exporter)
+
+Recommended flow:
+
+1. Install a userscript manager such as Tampermonkey or Violentmonkey.
+2. Install the `twitter-web-exporter` userscript.
+3. Open the relevant page on the X/Twitter web app, for example a Likes page.
+4. Scroll until the data you want is fully loaded in the browser.
+5. Use the exporter panel to export the captured data as `JSON`.
+6. Feed that exported JSON file into this repository's `sync_x_likes.py`.
+
+Important notes:
+
+- this repo does not scrape X directly
+- this repo starts from an already exported JSON file
+- completeness depends on what the Twitter web app has already loaded in your browser
+
 ## Input
 
 The script expects an exported X Likes JSON file.

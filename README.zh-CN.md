@@ -55,6 +55,29 @@ convert-x-likes-to-markdown/
 
 不需要额外安装第三方 Python 依赖。
 
+## 如何获得输入 JSON
+
+这个项目本身不负责直接从 X 抓取数据，它的前提是你先拿到一份导出的 JSON 文件。
+
+推荐使用的上游导出工具是：
+
+- [prinsss/twitter-web-exporter](https://github.com/prinsss/twitter-web-exporter)
+
+推荐流程：
+
+1. 先安装 Tampermonkey 或 Violentmonkey 这类 userscript 管理器。
+2. 安装 `twitter-web-exporter` 的 userscript。
+3. 在 X/Twitter 网页端打开你要导出的页面，例如 Likes 页面。
+4. 向下滚动，直到你想导出的数据都已经在页面里加载出来。
+5. 用导出面板把当前捕获的数据导出为 `JSON`。
+6. 再把这份 JSON 文件交给本仓库的 `sync_x_likes.py` 使用。
+
+需要注意：
+
+- 本仓库不会直接抓取 X
+- 本仓库的起点是一份已经导出的 JSON 文件
+- 导出内容是否完整，取决于网页端实际加载了多少数据
+
 ## 输入
 
 脚本输入是一份导出的 X Likes JSON 文件。
