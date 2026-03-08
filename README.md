@@ -1,22 +1,9 @@
 # convert-x-likes-to-markdown
 
+[![README-English](https://img.shields.io/badge/README-English-2d6cdf?style=for-the-badge)](README.md)
+[![README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87](https://img.shields.io/badge/README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555555?style=for-the-badge)](README.zh-CN.md)
+
 Convert an exported X (Twitter) Likes JSON file into a local Markdown archive.
-
-## 中文简介
-
-这是一个把 X（Twitter）点赞导出 JSON 转成 Markdown 归档的小工具，同时也附带一份可直接给 Codex 使用的 skill 定义。
-
-它适合用来把点赞内容沉淀成可本地保存、可检索、可分类浏览的知识库，尤其适合 Obsidian 这类 Markdown 工作流。
-
-核心能力：
-
-- 把点赞 JSON 转成一条条 Markdown 笔记
-- 按日期、作者、主题领域生成索引
-- 支持 `create` 全量重建和 `merge` 增量更新
-- 支持 `auto` 自动分类和 `manual` 手工规则分类
-- 支持中英文标题输出
-
-如果你只想快速开始，可以直接看下面的 “Command Reference”。
 
 This repository contains both:
 
