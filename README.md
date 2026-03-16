@@ -27,7 +27,8 @@ Given an exported X Likes JSON file, the tool can:
 - rebuild an archive from scratch (`create`)
 - merge new likes into an existing archive (`merge`)
 - classify content automatically from JSON signals (`auto`)
-- apply user-authored rules (`manual`)
+- apply user-authored JSON or Markdown classification sources (`manual`)
+- in the Codex skill workflow, reuse an established Markdown taxonomy note automatically when the user selects `auto`
 - generate either English or Chinese titles for generated notes and indexes
 
 ## Repository Layout
@@ -158,7 +159,12 @@ Reference policy:
 
 ### `manual`
 
-Manual mode applies a first-match rules file that you provide.
+Manual mode accepts a classification source that you provide.
+
+Supported manual sources:
+
+- a JSON rules file
+- a Markdown classification note that should be parsed into executable rules
 
 Reference example:
 
@@ -172,9 +178,24 @@ python3 scripts/sync_x_likes.py \
   --target-root "/path/to/output" \
   --mode create \
   --classification manual \
-  --manual-rules "/path/to/manual-rules.json" \
+  --manual-rules "/path/to/classification-note.md" \
   --title-language zh
 ```
+
+## Codex Skill Semantics
+
+When this repository is used through its Codex skill, the interaction rules are slightly higher-level than the raw CLI flags:
+
+- the skill should first show the required inputs and allowed options
+- the default collection style is a short one-question-at-a-time flow
+- if the user selects `auto`, the skill should automatically use the already-designated Markdown classification note for that workspace or repository when one exists
+- if the user selects `manual`, the skill should ask the user to provide a Markdown classification source, either pasted inline or by giving another Markdown path
+- in merge flows, the skill should inspect the existing archive first and preserve repository conventions unless the user explicitly asks for a full reclassification
+
+In other words:
+
+- CLI `--classification auto` still means JSON-signal auto classification
+- skill-level `auto` means “use the default Markdown taxonomy note automatically, if one has already been established”
 
 ## Command Reference
 
@@ -197,7 +218,7 @@ python3 scripts/sync_x_likes.py \
   --target-root "/path/to/output" \
   --mode create \
   --classification manual \
-  --manual-rules "/path/to/manual-rules.json" \
+  --manual-rules "/path/to/classification-note.md" \
   --title-language zh
 ```
 
@@ -216,7 +237,7 @@ python3 scripts/sync_x_likes.py \
 - `--title-language`
   Optional. `en` or `zh`. Defaults to `en`.
 - `--manual-rules`
-  Required when `--classification manual`.
+  Required when `--classification manual`. Accepts either a JSON rules file or a Markdown classification note.
 
 ## Generated Note Rules
 
@@ -243,17 +264,19 @@ Current limits from the script:
 - max domain depth: `8`
 - max domain leaf size before rebalance: `100`
 
-## Example Manual Rules File
+## Example Manual Classification Sources
 
 See:
 
 - [references/manual-rules.example.json](references/manual-rules.example.json)
 
-That example demonstrates:
+That JSON example demonstrates:
 
 - fallback domain/tag
 - keyword-based manual domain routing
 - topic tag extraction
+
+You can also use a Markdown classification note instead of JSON when your taxonomy already exists as a note hierarchy.
 
 ## Using It As a Codex Skill
 
@@ -267,9 +290,10 @@ The intended interaction flow is:
 2. Ask where the archive should be written.
 3. Ask whether to use `merge` or `create`.
 4. Ask whether classification should be `auto` or `manual`.
-5. If `manual`, ask for the rules JSON path.
-6. Ask whether generated titles should use `en` or `zh`.
-7. Run the sync command and inspect the JSON summary.
+5. If `auto`, state which established Markdown classification note will be used, and only ask if that default is missing or ambiguous.
+6. If `manual`, ask for the classification source as pasted Markdown or another Markdown path.
+7. Ask whether generated titles should use `en` or `zh`.
+8. Run the sync command and inspect the JSON summary.
 
 The agent config used for skill registration is:
 
@@ -301,17 +325,17 @@ python3 scripts/sync_x_likes.py \
 
 ### Manual curation workflow
 
-1. Start from `manual-rules.example.json`
-2. adapt rules to your own domain taxonomy
+1. Start from either `manual-rules.example.json` or an existing Markdown taxonomy note
+2. adapt the source to your own domain taxonomy
 3. run the script in `manual` mode
 4. inspect `03 Domain/` and `Dashboard.md`
-5. refine rules and rerun if needed
+5. refine the source and rerun if needed
 
 ## Notes
 
 - The archive is editor-agnostic Markdown. Obsidian is a target, not a hard dependency.
 - Auto mode is best when you want broad semantic grouping with minimal setup.
-- Manual mode is best when you already know your preferred taxonomy.
+- Manual mode is best when you already know your preferred taxonomy, especially if it already exists as a Markdown note.
 
 ## License / Reuse
 

@@ -27,7 +27,8 @@
 - 通过 `create` 从头重建归档
 - 通过 `merge` 增量并入已有归档
 - 通过 `auto` 使用 JSON 信号自动分类
-- 通过 `manual` 使用自定义规则分类
+- 通过 `manual` 使用自定义 JSON 或 Markdown 分类源
+- 在 Codex skill 工作流里，如果用户选择 `auto`，自动复用已指定的 Markdown 分类笔记
 - 生成英文或中文标题与索引名称
 
 ## 仓库结构
@@ -160,7 +161,12 @@ X Likes/
 
 ### `manual`
 
-手工分类模式会使用你提供的一份 first-match 规则 JSON。
+手工分类模式会使用你提供的一份分类源。
+
+支持的手工分类源：
+
+- 一份 JSON 规则文件
+- 一份 Markdown 分类笔记，脚本会先把它解析成可执行规则
 
 示例规则文件：
 
@@ -174,9 +180,24 @@ python3 scripts/sync_x_likes.py \
   --target-root "/path/to/output" \
   --mode create \
   --classification manual \
-  --manual-rules "/path/to/manual-rules.json" \
+  --manual-rules "/path/to/classification-note.md" \
   --title-language zh
 ```
+
+## Codex Skill 语义
+
+当这个仓库通过 Codex skill 使用时，交互语义会比底层 CLI 参数更高一层：
+
+- skill 会先说明必填输入和允许值
+- 默认用一次一个问题的短流程收集参数
+- 如果用户选择 `auto`，并且当前工作区或仓库已经指定过默认 Markdown 分类笔记，就应当自动使用那份笔记
+- 如果用户选择 `manual`，就应当要求用户提供 Markdown 分类源，可以直接粘贴在输入框里，也可以给另一个 Markdown 路径
+- 在 `merge` 流程里，skill 需要先检查现有归档，并尽量保留当前仓库约定，除非用户明确要求全量重分类
+
+换句话说：
+
+- CLI 层面的 `--classification auto` 仍然表示“用 JSON 信号自动分类”
+- skill 层面的 `auto` 表示“如果已经约定了默认 Markdown taxonomy note，就自动使用它”
 
 ## 命令参考
 
@@ -199,7 +220,7 @@ python3 scripts/sync_x_likes.py \
   --target-root "/path/to/output" \
   --mode create \
   --classification manual \
-  --manual-rules "/path/to/manual-rules.json" \
+  --manual-rules "/path/to/classification-note.md" \
   --title-language zh
 ```
 
@@ -218,7 +239,7 @@ python3 scripts/sync_x_likes.py \
 - `--title-language`
   可选。`en` 或 `zh`，默认 `en`。
 - `--manual-rules`
-  当 `--classification manual` 时必填。
+  当 `--classification manual` 时必填。可以是 JSON 规则文件，也可以是 Markdown 分类笔记。
 
 ## 生成规则
 
@@ -245,17 +266,19 @@ python3 scripts/sync_x_likes.py \
 - 最大领域深度：`8`
 - 领域叶子文件最大容量阈值：`100`
 
-## 手工规则示例
+## 手工分类源示例
 
 见：
 
 - [references/manual-rules.example.json](references/manual-rules.example.json)
 
-这个示例展示了：
+这个 JSON 示例展示了：
 
 - fallback domain/tag
 - 基于关键词的领域路由
 - topic tag 提取
+
+如果你的分类体系本来就存在于一份 Markdown 笔记里，也可以直接把那份笔记作为手工分类源。
 
 ## 作为 Codex Skill 使用
 
@@ -269,9 +292,10 @@ python3 scripts/sync_x_likes.py \
 2. 询问归档输出位置
 3. 询问使用 `merge` 还是 `create`
 4. 询问使用 `auto` 还是 `manual`
-5. 如果选 `manual`，再询问规则 JSON 路径
-6. 询问标题输出语言使用 `en` 还是 `zh`
-7. 运行同步命令并检查 JSON summary
+5. 如果选 `auto`，说明将使用哪一份已建立的 Markdown 分类笔记；只有在默认来源缺失或不明确时才继续追问
+6. 如果选 `manual`，要求用户提供分类源，可以是输入框粘贴的 Markdown，也可以是另一个 Markdown 路径
+7. 询问标题输出语言使用 `en` 还是 `zh`
+8. 运行同步命令并检查 JSON summary
 
 skill 注册配置见：
 
@@ -303,17 +327,17 @@ python3 scripts/sync_x_likes.py \
 
 ### 手工分类工作流
 
-1. 先从 `manual-rules.example.json` 开始
-2. 按自己的领域体系修改规则
+1. 可以从 `manual-rules.example.json` 开始，也可以直接使用现成的 Markdown 分类笔记
+2. 按自己的领域体系修改分类源
 3. 用 `manual` 模式运行脚本
 4. 检查 `03 Domain/` 和 `Dashboard.md`
-5. 根据结果继续调规则并重跑
+5. 根据结果继续调整分类源并重跑
 
 ## 备注
 
 - 输出是编辑器无关的 Markdown，Obsidian 只是重点目标之一
 - `auto` 适合希望少配置、快速获得大致语义归类的场景
-- `manual` 适合已经有明确分类体系的场景
+- `manual` 适合已经有明确分类体系的场景，尤其是这套体系本来就存在于一份 Markdown 笔记中
 
 ## 许可证
 
