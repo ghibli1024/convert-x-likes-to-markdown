@@ -17,6 +17,7 @@ Classification:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -331,6 +332,91 @@ def as_list(v: object) -> List[object]:
     return v if isinstance(v, list) else []
 
 
+def clean_rule_label(value: str) -> str:
+    s = str(value or "").strip().strip("`").strip()
+    if not s:
+        return ""
+    s = re.sub(r"\[\[[^\]|]+\|([^\]]+)\]\]", r"\1", s)
+    s = re.sub(r"\[\[([^\]]+)\]\]", r"\1", s)
+    s = s.replace("（", "(").replace("）", ")")
+    s = re.sub(r"^[>\-\*\+\s]+", "", s)
+    s = re.sub(r"^\d+[.)]\s*", "", s)
+    s = s.replace("📂", " ")
+    s = re.sub(r"[`*_]+", " ", s)
+    s = re.sub(r"\s*\([^)]*\)\s*$", "", s)
+    s = re.sub(r"^[^A-Za-z0-9\u4e00-\u9fff]+", "", s)
+    s = re.sub(r"\s+", " ", s).strip(" /")
+    return s
+
+
+def normalize_rule_label_key(value: str) -> str:
+    s = clean_rule_label(value).lower().replace("&", "and")
+    return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", s)
+
+
+def extract_markdown_rule_labels(text: str) -> List[str]:
+    labels: List[str] = []
+
+    def add(raw: str) -> None:
+        clean = clean_rule_label(raw)
+        if not clean:
+            return
+        if clean in {"ROOT", "根目录", "层级统计", "三级目录快速跳转"}:
+            return
+        labels.append(clean)
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        if stripped.startswith("### "):
+            add(stripped[4:])
+
+        for m in re.finditer(r"\[\[[^\]|]+\|([^\]]+)\]\]", stripped):
+            add(m.group(1))
+
+        if "ROOT /" in stripped:
+            plain = stripped.replace("`", "")
+            idx = plain.find("ROOT /")
+            if idx != -1:
+                path_text = plain[idx:]
+                parts = [p.strip() for p in path_text.split("/")]
+                for part in parts[1:]:
+                    add(part)
+
+        if stripped.startswith("- ") and "[[" not in stripped and "|" not in stripped and len(stripped) <= 80:
+            add(stripped[2:])
+
+    # Keep first-seen order while deduplicating.
+    seen = set()
+    out: List[str] = []
+    for label in labels:
+        key = normalize_rule_label_key(label)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(label)
+    return out
+
+
+def build_label_index(labels: Sequence[str]) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    for label in labels:
+        key = normalize_rule_label_key(label)
+        if key and key not in out:
+            out[key] = label
+    return out
+
+
+def pick_rule_label(label_index: Dict[str, str], *candidates: str, default: str) -> str:
+    for candidate in candidates:
+        key = normalize_rule_label_key(candidate)
+        if key in label_index:
+            return label_index[key]
+    return clean_rule_label(default) or default
+
+
 # Logical taxonomy inspired by library-style grouping.
 TOP_DOMAIN_ORDER: List[str] = [
     "AI",
@@ -497,6 +583,16 @@ def localize_domain_parts(parts: Sequence[str]) -> List[str]:
     return [localize_domain_part(p) for p in clean]
 
 ALLOWED_TOP_DOMAINS = set(TOP_DOMAIN_ORDER)
+
+
+def register_manual_top_domains(rules: Dict[str, object]) -> None:
+    for item in as_list(rules.get("top_domains")):
+        clean = sanitize_filename(str(item)).strip()
+        if not clean:
+            continue
+        ALLOWED_TOP_DOMAINS.add(clean)
+        if clean not in TOP_DOMAIN_ORDER:
+            TOP_DOMAIN_ORDER.append(clean)
 
 DOMAIN_TAG_MAP: Dict[str, str] = {
     "AI": "domain/ai",
@@ -963,7 +1059,8 @@ def domain_tag_from_parts(parts: Sequence[str]) -> str:
         return DOMAIN_TAG_MAP[key]
     if clean and clean[0] in DOMAIN_TAG_MAP:
         return DOMAIN_TAG_MAP[clean[0]]
-    return "domain/misc"
+    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+    return f"domain/manual-{digest}"
 
 
 def score_rule(text: str, hosts: Sequence[str], media_types: Sequence[str], rule: Dict[str, object]) -> int:
@@ -1135,13 +1232,332 @@ def auto_classify(
     return best_domain, domain_tag_from_parts(best_domain), topics
 
 
+def manual_rule(domain_parts: Sequence[str], keywords: Sequence[str], hosts: Sequence[str] = ()) -> Dict[str, object]:
+    clean_parts = []
+    for part in domain_parts:
+        clean = clean_rule_label(part).replace("/", " ").strip()
+        if clean:
+            clean_parts.append(clean)
+    rule = {
+        "domain": "/".join(clean_parts),
+        "keywords": sorted({str(k).strip() for k in keywords if str(k).strip()}),
+    }
+    if hosts:
+        rule["hosts"] = sorted({normalize_host(str(h)) for h in hosts if normalize_host(str(h))})
+    return rule
+
+
+def build_manual_rules_from_markdown(path: Path) -> Dict[str, object]:
+    text = path.read_text(encoding="utf-8")
+    labels = extract_markdown_rule_labels(text)
+    label_index = build_label_index(labels)
+
+    top_ai = pick_rule_label(label_index, "人工智能", default="人工智能")
+    top_office = pick_rule_label(label_index, "办公相关", default="办公相关")
+    top_learning = pick_rule_label(label_index, "学习相关", default="学习相关")
+    top_industry = pick_rule_label(label_index, "各行各业", default="各行各业")
+    top_gallery = pick_rule_label(label_index, "图库素材", default="图库素材")
+    top_design = pick_rule_label(label_index, "设计相关", default="设计相关")
+    top_life = pick_rule_label(label_index, "懂得生活", default="懂得生活")
+    top_books = pick_rule_label(label_index, "书籍相关", default="书籍相关")
+    top_news = pick_rule_label(label_index, "新闻资讯", default="新闻资讯")
+    top_computer = pick_rule_label(label_index, "电脑常用", default="电脑常用")
+    top_software = pick_rule_label(label_index, "软件相关", default="软件相关")
+    top_video = pick_rule_label(label_index, "影视相关", default="影视相关")
+    top_anime = pick_rule_label(label_index, "动漫漫画", default="动漫漫画")
+    top_game = pick_rule_label(label_index, "游戏相关", default="游戏相关")
+    top_resources = pick_rule_label(label_index, "资源探索", default="资源探索")
+
+    ai_api = pick_rule_label(label_index, "API 资源", default="API 资源")
+    ai_writing = pick_rule_label(label_index, "写作文档", default="写作文档")
+    ai_image = pick_rule_label(label_index, "图像生成", default="图像生成")
+    ai_chat = pick_rule_label(label_index, "对话与聚合", default="对话与聚合")
+    ai_prompt = pick_rule_label(label_index, "提示词工程", default="提示词工程")
+    ai_agent = pick_rule_label(label_index, "智能体", default="智能体")
+    ai_local = pick_rule_label(label_index, "本地部署", default="本地部署")
+    ai_geek = pick_rule_label(label_index, "极客开发", default="极客开发")
+    ai_kb = pick_rule_label(label_index, "知识库", default="知识库")
+    ai_auto = pick_rule_label(label_index, "自动化", default="自动化")
+
+    office_obsidian = pick_rule_label(label_index, "obsidian", default="obsidian")
+    office_notion = pick_rule_label(label_index, "notion", default="notion")
+    office_feishu = pick_rule_label(label_index, "飞书", default="飞书")
+    office_collab = pick_rule_label(label_index, "团队协作", default="团队协作")
+    office_pm = pick_rule_label(label_index, "项目管理", default="项目管理")
+    office_km = pick_rule_label(label_index, "知识管理系统", default="知识管理系统")
+    office_overseas = pick_rule_label(label_index, "开发者出海", default="开发者出海")
+
+    learning_ai = pick_rule_label(label_index, "ai学习教程", default="ai学习教程")
+    learning_english = pick_rule_label(label_index, "英语学习", "英语", default="英语学习")
+    learning_growth = pick_rule_label(label_index, "增长课程", default="增长课程")
+
+    industry_finance = pick_rule_label(label_index, "股票财经", default="股票财经")
+    industry_creator = pick_rule_label(label_index, "自媒体", default="自媒体")
+
+    gallery_ui = pick_rule_label(label_index, "UI/UX设计", "UI UX设计", default="UI UX设计")
+    design_online = pick_rule_label(label_index, "在线设计", default="在线设计")
+
+    life_health = pick_rule_label(label_index, "医学健康", "营养健康", "身体健康", default="医学健康")
+    life_mind = pick_rule_label(label_index, "心理相关", default="心理相关")
+    life_tips = pick_rule_label(label_index, "生活技巧", default="生活技巧")
+
+    books_reading = pick_rule_label(label_index, "书单推荐", "书籍分享", "书籍信息", default="书单推荐")
+    news_media = pick_rule_label(label_index, "全球媒体导航", "新媒体导航", default="全球媒体导航")
+    computer_github = pick_rule_label(label_index, "github相关", default="github相关")
+    computer_code = pick_rule_label(label_index, "编程相关", "it导航", default="编程相关")
+    software_mac = pick_rule_label(label_index, "mac软件推荐", default="mac软件推荐")
+    software_win = pick_rule_label(label_index, "win软件推荐", default="win软件推荐")
+    software_android = pick_rule_label(label_index, "安卓软件推荐", default="安卓软件推荐")
+    video_watch = pick_rule_label(label_index, "一起观影听歌", "影视导航", default="一起观影听歌")
+    anime_acg = pick_rule_label(label_index, "综合acg", "二次元导航", default="综合acg")
+    game_nav = pick_rule_label(label_index, "游戏导航", "游戏类", default="游戏导航")
+
+    top_domains = [
+        top_ai,
+        top_office,
+        top_learning,
+        top_industry,
+        top_gallery,
+        top_design,
+        top_life,
+        top_books,
+        top_news,
+        top_computer,
+        top_software,
+        top_video,
+        top_anime,
+        top_game,
+        top_resources,
+    ]
+    seen_top = set()
+    top_domains = [x for x in top_domains if x and not (x in seen_top or seen_top.add(x))]
+
+    rules = [
+        manual_rule(
+            [top_ai, ai_agent],
+            [
+                "agent",
+                "agents",
+                "智能体",
+                "mcp",
+                "manus",
+                "orchestration",
+                "tool use",
+                "agent workflow",
+                "server connector",
+                "autonomous",
+                "多智能体",
+            ],
+            ["claude.md"],
+        ),
+        manual_rule(
+            [top_ai, ai_prompt],
+            [
+                "prompt",
+                "prompts",
+                "system prompt",
+                "system prompts",
+                "提示词",
+                "prompt engineering",
+                "jailbreak",
+                "越狱",
+            ],
+        ),
+        manual_rule(
+            [top_ai, ai_chat],
+            [
+                "chatgpt",
+                "claude",
+                "gemini",
+                "deepseek",
+                "kimi",
+                "grok",
+                "llm chat",
+                "聊天模型",
+                "ai 助手",
+                "对话模型",
+                "大模型平台",
+            ],
+            ["claude.ai", "openai.com", "chatgpt.com", "gemini.google.com", "aistudio.google.com"],
+        ),
+        manual_rule(
+            [top_ai, ai_api],
+            [
+                "api",
+                "sdk",
+                "api key",
+                "openrouter",
+                "proxy",
+                "gateway",
+                "中转",
+                "接口",
+                "token",
+                "rate limit",
+            ],
+            ["openrouter.ai", "platform.openai.com", "api.anthropic.com"],
+        ),
+        manual_rule(
+            [top_ai, ai_local],
+            [
+                "ollama",
+                "vllm",
+                "lm studio",
+                "self-hosted",
+                "self hosted",
+                "local model",
+                "本地部署",
+                "本地模型",
+                "推理引擎",
+                "webui",
+            ],
+            ["huggingface.co"],
+        ),
+        manual_rule(
+            [top_ai, ai_kb],
+            [
+                "rag",
+                "notebooklm",
+                "知识库",
+                "向量数据库",
+                "embedding",
+                "semantic search",
+                "文档问答",
+                "检索增强",
+                "pdf chat",
+            ],
+        ),
+        manual_rule(
+            [top_ai, ai_image],
+            [
+                "comfyui",
+                "midjourney",
+                "stable diffusion",
+                "dall-e",
+                "flux",
+                "runway",
+                "sora",
+                "图像生成",
+                "绘图",
+                "绘画",
+                "视频生成",
+                "多模态",
+            ],
+        ),
+        manual_rule(
+            [top_ai, ai_auto],
+            [
+                "n8n",
+                "zapier",
+                "make.com",
+                "workflow",
+                "automation",
+                "自动化",
+                "工作流",
+                "cron",
+                "bot",
+                "机器人",
+            ],
+        ),
+        manual_rule(
+            [top_ai, ai_geek],
+            [
+                "benchmark",
+                "leaderboard",
+                "evaluation",
+                "模型评测",
+                "gpu",
+                "serverless",
+                "部署成本",
+                "price analysis",
+                "latency",
+                "推理加速",
+            ],
+        ),
+        manual_rule(
+            [top_ai, ai_writing],
+            [
+                "writing",
+                "copywriting",
+                "文案",
+                "写作",
+                "润色",
+                "论文",
+                "博客",
+                "内容营销",
+                "docs",
+                "document",
+            ],
+        ),
+        manual_rule([top_office, office_obsidian], ["obsidian", "dataview", "wikilink", "canvas", "vault"], ["obsidian.md"]),
+        manual_rule([top_office, office_notion], ["notion", "notion ai"], ["notion.so", "notion.site"]),
+        manual_rule([top_office, office_feishu], ["feishu", "lark", "飞书", "多维表格"], ["feishu.cn", "my.feishu.cn"]),
+        manual_rule([top_office, office_km], ["knowledge management", "pkm", "second brain", "知识管理", "笔记系统"]),
+        manual_rule([top_office, office_collab], ["collaboration", "协作", "team", "async", "workspace", "团队协作"], ["slack.com", "discord.com"]),
+        manual_rule([top_office, office_pm], ["project management", "roadmap", "kanban", "jira", "linear", "scrum", "项目管理"]),
+        manual_rule([top_office, office_overseas], ["indie hacker", "indie hacking", "saas", "build in public", "出海", "海外增长", "支付", "订阅"]),
+        manual_rule([top_learning, learning_ai], ["教程", "guide", "course", "learning path", "机器学习", "深度学习", "whitepaper", "paper", "ai学习"]),
+        manual_rule([top_learning, learning_english], ["english", "ielts", "toefl", "英语", "雅思", "词典", "语法", "listening", "speaking"]),
+        manual_rule([top_learning, learning_growth], ["growth", "增长", "增长课程", "marketing course", "运营课程", "增长黑客"]),
+        manual_rule(
+            [top_industry, industry_finance],
+            ["stock", "finance", "invest", "investment", "macro", "btc", "bitcoin", "crypto", "eth", "binance", "okx", "股票", "基金", "量化", "财经"],
+            ["binance.com", "okx.com", "coindesk.com", "cointelegraph.com"],
+        ),
+        manual_rule(
+            [top_industry, industry_creator],
+            ["creator", "content creator", "newsletter", "自媒体", "博主", "流量", "涨粉", "直播", "短视频", "剪辑", "内容分发"],
+        ),
+        manual_rule([top_gallery, gallery_ui], ["figma", "design system", "component library", "wireframe", "界面", "交互", "原型", "设计灵感"], ["figma.com", "dribbble.com", "behance.net"]),
+        manual_rule([top_design, design_online], ["canva", "photoshop", "illustrator", "海报", "封面", "logo", "视觉设计", "品牌设计", "在线设计"]),
+        manual_rule([top_life, life_health], ["health", "medical", "medicine", "sleep", "fitness", "运动", "健康", "医疗", "药品", "营养"]),
+        manual_rule([top_life, life_mind], ["心理", "mental", "therapy", "anxiety", "depression", "mindfulness", "认知行为"]),
+        manual_rule([top_life, life_tips], ["生活技巧", "life tips", "kitchen", "travel tips", "household", "效率生活"]),
+        manual_rule([top_books, books_reading], ["book", "books", "reading", "kindle", "书", "阅读", "书单", "电子书", "作者"], ["goodreads.com"]),
+        manual_rule([top_news, news_media], ["news", "breaking", "报道", "媒体", "journalism", "记者", "时评", "资讯"]),
+        manual_rule([top_computer, computer_github], ["github", "gitlab", "repo", "repository", "star", "readme", "开源仓库"], ["github.com", "gitlab.com"]),
+        manual_rule([top_computer, computer_code], ["python", "javascript", "typescript", "rust", "golang", "backend", "frontend", "database", "linux", "编程", "开发", "架构", "代码"]),
+        manual_rule([top_software, software_mac], ["mac app", "macos", "raycast", "alfred", "mac 软件", "mac工具"], ["raycast.com"]),
+        manual_rule([top_software, software_win], ["windows app", "win软件", "windows 工具", "pc 软件"]),
+        manual_rule([top_software, software_android], ["android app", "apk", "安卓", "android 工具"]),
+        manual_rule([top_video, video_watch], ["movie", "film", "tv", "纪录片", "影视", "观影", "剧集", "电影"]),
+        manual_rule([top_anime, anime_acg], ["anime", "manga", "动漫", "漫画", "acg", "二次元", "ghibli"]),
+        manual_rule([top_game, game_nav], ["game", "gaming", "steam", "游戏", "switch", "xbox", "playstation"]),
+    ]
+
+    topic_rules = [
+        {"tag": "topic/obsidian", "keywords": ["obsidian"], "hosts": ["obsidian.md"]},
+        {"tag": "topic/notion", "keywords": ["notion"], "hosts": ["notion.so", "notion.site"]},
+        {"tag": "topic/feishu", "keywords": ["feishu", "lark", "飞书"], "hosts": ["feishu.cn", "my.feishu.cn"]},
+        {"tag": "topic/github", "keywords": ["github", "gitlab", "开源"], "hosts": ["github.com", "gitlab.com"]},
+        {"tag": "topic/agent", "keywords": ["agent", "mcp", "智能体", "manus"]},
+        {"tag": "topic/prompt", "keywords": ["prompt", "提示词", "system prompt"]},
+        {"tag": "topic/finance", "keywords": ["bitcoin", "btc", "crypto", "股票", "投资"]},
+        {"tag": "topic/design", "keywords": ["figma", "ui", "ux", "设计"]},
+        {"tag": "topic/english", "keywords": ["english", "英语", "雅思"]},
+        {"tag": "topic/health", "keywords": ["health", "健康", "睡眠", "营养"]},
+    ]
+
+    return {
+        "fallback_domain": f"{top_resources}/其他",
+        "top_domains": top_domains,
+        "rules": rules,
+        "topic_rules": topic_rules,
+        "rule_source": str(path),
+        "rule_source_format": "markdown",
+    }
+
+
 def load_manual_rules(path: Path) -> Dict[str, object]:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    if path.suffix.lower() == ".md":
+        data = build_manual_rules_from_markdown(path)
+    else:
+        data = json.loads(path.read_text(encoding="utf-8"))
     if "rules" not in data or not isinstance(data["rules"], list):
         raise ValueError("manual rules JSON must include list field: rules")
     fallback = data.get("fallback_domain", "其他")
     if not isinstance(fallback, str) or not fallback.strip():
         raise ValueError("fallback_domain must be non-empty string")
+    register_manual_top_domains(data)
     return data
 
 
@@ -1150,13 +1566,18 @@ def manual_classify(
     content: str,
     source: str,
     rules: Dict[str, object],
+    media_lines: Optional[Sequence[str]] = None,
 ) -> Tuple[List[str], str, List[str]]:
-    text = f"{title}\n{content}\n{source}".lower()
+    media_lines = list(media_lines or [])
+    raw_text = f"{title}\n{content}\n{source}\n" + "\n".join(media_lines)
+    text = raw_text.lower()
+    hosts = sorted(set(extract_hosts_from_text(raw_text)))
+    media_types = extract_media_types_from_lines(media_lines)
     rule_list = rules.get("rules", [])
     fallback = str(rules.get("fallback_domain", "其他"))
 
     chosen_domain = fallback
-    chosen_tag = str(rules.get("fallback_tag", "domain/misc"))
+    chosen_tag = str(rules.get("fallback_tag", "")).strip()
 
     for rule in rule_list:
         if not isinstance(rule, dict):
@@ -1164,15 +1585,14 @@ def manual_classify(
         domain = str(rule.get("domain", "")).strip()
         if not domain:
             continue
-        keywords = rule.get("keywords", [])
-        if not isinstance(keywords, list):
+        has_keywords = isinstance(rule.get("keywords", []), list) and any(str(k).strip() for k in rule.get("keywords", []))
+        has_hosts = isinstance(rule.get("hosts", []), list) and any(str(h).strip() for h in rule.get("hosts", []))
+        has_media = isinstance(rule.get("media_types", []), list) and any(str(m).strip() for m in rule.get("media_types", []))
+        if not any([has_keywords, has_hosts, has_media]):
             continue
-        kws = [str(k).lower() for k in keywords if str(k).strip()]
-        if not kws:
-            continue
-        if has_any(text, kws):
+        if score_rule(text, hosts, media_types, rule) > 0:
             chosen_domain = domain
-            chosen_tag = str(rule.get("tag", "domain/manual"))
+            chosen_tag = str(rule.get("tag", "")).strip()
             break
 
     parts = normalize_domain_parts([p.strip() for p in chosen_domain.split("/") if p.strip()])
@@ -1184,10 +1604,9 @@ def manual_classify(
             if not isinstance(tr, dict):
                 continue
             tag = str(tr.get("tag", "")).strip()
-            kws = tr.get("keywords", [])
-            if not tag or not isinstance(kws, list):
+            if not tag:
                 continue
-            if has_any(text, [str(k).lower() for k in kws]):
+            if score_rule(text, hosts, media_types, tr) > 0:
                 topics.append(tag)
 
     if not chosen_tag.startswith("domain/"):
@@ -1203,6 +1622,15 @@ def parse_media_lines_from_block(media_block: str) -> List[str]:
         if ln:
             lines.append(ln)
     return lines
+
+
+def extract_media_types_from_lines(media_lines: Sequence[str]) -> List[str]:
+    out: List[str] = []
+    for line in media_lines:
+        m = re.match(r"-\s*([A-Za-z0-9_-]+)\b", line.strip())
+        if m:
+            out.append(m.group(1).lower())
+    return out
 
 
 def domain_rel_link(parts: Sequence[str]) -> str:
@@ -1323,16 +1751,6 @@ def parse_json_records(
         title = normalize_title(full_text, fallback_post_title(tweet_id))
         source = str(item.get("url") or f"https://x.com/i/web/status/{tweet_id}")
 
-        if classification == "auto":
-            domain_parts, domain_tag, topics = auto_classify(item, title, full_text, source)
-        else:
-            assert manual_rules is not None
-            domain_parts, domain_tag, topics = manual_classify(title, full_text, source, manual_rules)
-
-        domain_parts = normalize_domain_parts(domain_parts)
-        if not domain_tag.startswith("domain/"):
-            domain_tag = domain_tag_from_parts(domain_parts)
-
         media = as_list(item.get("media"))
         media_lines: List[str] = []
         for i, m in enumerate(media):
@@ -1341,6 +1759,16 @@ def parse_json_records(
             media_type = md.get("type") or "media"
             if original:
                 media_lines.append(f"- {media_type} {i + 1}: {original}")
+
+        if classification == "auto":
+            domain_parts, domain_tag, topics = auto_classify(item, title, full_text, source)
+        else:
+            assert manual_rules is not None
+            domain_parts, domain_tag, topics = manual_classify(title, full_text, source, manual_rules, media_lines)
+
+        domain_parts = normalize_domain_parts(domain_parts)
+        if not domain_tag.startswith("domain/"):
+            domain_tag = domain_tag_from_parts(domain_parts)
 
         by_id[tweet_id] = Record(
             tweet_id=tweet_id,
@@ -1391,6 +1819,14 @@ def reclassify_records_auto(records: Dict[str, Record]) -> None:
         rec.domain_parts = normalize_domain_parts(parts)
         rec.domain_tag = domain_tag_from_parts(rec.domain_parts) if not tag.startswith("domain/") else tag
         rec.topic_tags = sorted(set(rec.topic_tags + topics))
+
+
+def reclassify_records_manual(records: Dict[str, Record], rules: Dict[str, object]) -> None:
+    for rec in records.values():
+        parts, tag, topics = manual_classify(rec.title, rec.content, rec.source, rules, rec.media_lines)
+        rec.domain_parts = normalize_domain_parts(parts)
+        rec.domain_tag = domain_tag_from_parts(rec.domain_parts) if not tag.startswith("domain/") else tag
+        rec.topic_tags = sorted(set(topics))
 
 
 def keyword_label(text: str, rules: Sequence[Tuple[str, Sequence[str]]], fallback: str) -> str:
@@ -1506,11 +1942,11 @@ def infer_split_label(record: Record, parent_parts: Sequence[str]) -> str:
 
     rules = [
         ("教程与指南", ["guide", "how to", "教程", "指南", "步骤", "入门"]),
-        ("工具与资源", ["tool", "plugin", "resources", "工具", "资源", "插件", "合集"]),
-        ("产品与应用", ["product", "app", "service", "产品", "应用", "平台"]),
-        ("资讯与观点", ["news", "release", "update", "发布", "更新", "观点", "趋势"]),
-        ("案例与实践", ["case", "practice", "project", "实践", "案例", "实现"]),
-        ("清单与收藏", ["list", "collection", "清单", "合集", "收藏"]),
+        ("工具与资源", ["tool", "plugin", "resources", "工具", "资源", "插件", "合集", "markdown", "rss", "vps", "tailscale", "文档", "生成器", "客户端", "主题", "模板"]),
+        ("产品与应用", ["product", "app", "service", "产品", "应用", "平台", "openclaw", "clawhub", "minis"]),
+        ("资讯与观点", ["news", "release", "update", "发布", "更新", "观点", "趋势", "横评", "评价", "政策"]),
+        ("案例与实践", ["case", "practice", "project", "实践", "案例", "实现", "实战", "配置", "搭建", "调试", "debug"]),
+        ("清单与收藏", ["list", "collection", "清单", "合集", "收藏", "整理了一些", "汇总"]),
     ]
     return keyword_label(text, rules, "其他主题")
 
@@ -1522,11 +1958,11 @@ def infer_content_bucket(record: Record) -> str:
     url_count = len(re.findall(r"https?://\S+", text))
     n = len(text_wo_urls)
 
-    if has_any(text, ["github", "code", "api", "开源", "编程", "开发"]):
+    if has_any(text, ["github", "code", "api", "开源", "编程", "开发", "vps", "tailscale", "server", "rss", "debug", "ghostty", "内网穿透", "terminal", "前端", "后端", "程序员"]):
         return "代码技术"
     if has_any(text, ["learning", "course", "tutorial", "学习", "教程", "课程", "英语"]):
         return "学习资料"
-    if has_any(text, ["tool", "plugin", "obsidian", "notion", "工具", "插件", "效率"]):
+    if has_any(text, ["tool", "plugin", "obsidian", "notion", "工具", "插件", "效率", "markdown", "ppt", "pdf", "文档", "生成器", "客户端", "模板", "主题"]):
         return "工具应用"
     if has_any(text, ["book", "books", "reading", "书", "阅读", "书单"]):
         return "书籍阅读"
@@ -1534,9 +1970,9 @@ def infer_content_bucket(record: Record) -> str:
         return "娱乐八卦"
     if has_any(text, ["politics", "policy", "government", "政治", "政策"]):
         return "政治政策"
-    if has_any(text, ["economy", "macro", "gdp", "经济", "宏观", "通胀"]):
+    if has_any(text, ["economy", "macro", "gdp", "经济", "宏观", "通胀", "bitcoin", "btc", "比特币"]):
         return "经济宏观"
-    if has_any(text, ["health", "sleep", "fitness", "健康", "睡眠", "运动"]):
+    if has_any(text, ["health", "sleep", "fitness", "健康", "睡眠", "运动", "抑郁", "焦虑", "心理"]):
         return "健康生活"
 
     if url_count >= 1 and n <= 8:
@@ -1562,9 +1998,9 @@ def infer_secondary_bucket(record: Record, leaf_parts: Sequence[str]) -> str:
     top = leaf_parts[0] if leaf_parts else ""
 
     if leaf in {"中段内容", "短文内容", "中短内容", "中篇内容"}:
-        if has_any(text, ["github", "code", "api", "开源", "编程", "开发"]):
+        if has_any(text, ["github", "code", "api", "开源", "编程", "开发", "vps", "tailscale", "server", "rss", "ghostty", "terminal"]):
             return "技术向内容"
-        if has_any(text, ["tool", "plugin", "obsidian", "notion", "工具", "插件", "效率"]):
+        if has_any(text, ["tool", "plugin", "obsidian", "notion", "工具", "插件", "效率", "markdown", "ppt", "pdf", "生成器", "文档"]):
             return "工具向内容"
         if has_any(text, ["learning", "course", "tutorial", "学习", "教程", "课程", "英语"]):
             return "学习向内容"
@@ -1623,11 +2059,11 @@ def infer_secondary_bucket(record: Record, leaf_parts: Sequence[str]) -> str:
         return "中文技术" if has_zh else "英文技术"
 
     if leaf in {"主题杂项", "其他主题", "其他技术", "其他AI主题", "中文内容", "英文内容", "短帖观点"}:
-        if has_any(text, ["github", "code", "api", "开源", "编程", "开发"]):
+        if has_any(text, ["github", "code", "api", "开源", "编程", "开发", "vps", "tailscale", "server", "rss", "ghostty", "terminal"]):
             return "代码技术"
         if has_any(text, ["learning", "course", "tutorial", "学习", "教程", "课程", "英语"]):
             return "学习资料"
-        if has_any(text, ["tool", "plugin", "obsidian", "notion", "工具", "插件", "效率"]):
+        if has_any(text, ["tool", "plugin", "obsidian", "notion", "工具", "插件", "效率", "markdown", "ppt", "pdf", "文档", "生成器"]):
             return "工具应用"
         if has_any(text, ["book", "books", "reading", "书", "阅读", "书单"]):
             return "书籍阅读"
@@ -1635,9 +2071,9 @@ def infer_secondary_bucket(record: Record, leaf_parts: Sequence[str]) -> str:
             return "娱乐八卦"
         if has_any(text, ["politics", "policy", "government", "政治", "政策"]):
             return "政治政策"
-        if has_any(text, ["economy", "macro", "gdp", "经济", "宏观", "通胀"]):
+        if has_any(text, ["economy", "macro", "gdp", "经济", "宏观", "通胀", "bitcoin", "btc", "比特币"]):
             return "经济宏观"
-        if has_any(text, ["health", "sleep", "fitness", "健康", "睡眠", "运动"]):
+        if has_any(text, ["health", "sleep", "fitness", "健康", "睡眠", "运动", "抑郁", "焦虑", "心理"]):
             return "健康生活"
 
         if url_count >= 1 and n <= 8:
@@ -1670,15 +2106,15 @@ def infer_profile_bucket(record: Record) -> str:
     has_zh = bool(re.search(r"[\u4e00-\u9fff]", text_wo_urls))
 
     theme = "综合"
-    if has_any(text, ["github", "code", "api", "开源", "编程", "开发"]):
+    if has_any(text, ["github", "code", "api", "开源", "编程", "开发", "vps", "tailscale", "server", "rss", "ghostty", "terminal"]):
         theme = "技术"
     elif has_any(text, ["learning", "course", "tutorial", "学习", "教程", "课程", "英语"]):
         theme = "学习"
-    elif has_any(text, ["tool", "plugin", "obsidian", "notion", "工具", "插件", "效率"]):
+    elif has_any(text, ["tool", "plugin", "obsidian", "notion", "工具", "插件", "效率", "markdown", "ppt", "pdf", "文档", "生成器"]):
         theme = "工具"
-    elif has_any(text, ["investment", "finance", "crypto", "投资", "金融", "股票", "基金"]):
+    elif has_any(text, ["investment", "finance", "crypto", "bitcoin", "btc", "投资", "金融", "股票", "基金", "比特币"]):
         theme = "金融"
-    elif has_any(text, ["book", "books", "reading", "八卦", "明星", "书", "阅读", "娱乐"]):
+    elif has_any(text, ["book", "books", "reading", "八卦", "明星", "书", "阅读", "娱乐", "抑郁", "焦虑", "心理"]):
         theme = "文化"
 
     lang = "中文" if has_zh else "英文"
@@ -1704,15 +2140,15 @@ def infer_fine_bucket(record: Record) -> str:
     has_zh = bool(re.search(r"[\u4e00-\u9fff]", text_wo_urls))
 
     theme = "综合"
-    if has_any(text, ["github", "code", "api", "开源", "编程", "开发"]):
+    if has_any(text, ["github", "code", "api", "开源", "编程", "开发", "vps", "tailscale", "server", "rss", "ghostty", "terminal"]):
         theme = "技术"
     elif has_any(text, ["learning", "course", "tutorial", "学习", "教程", "课程", "英语"]):
         theme = "学习"
-    elif has_any(text, ["tool", "plugin", "obsidian", "notion", "工具", "插件", "效率"]):
+    elif has_any(text, ["tool", "plugin", "obsidian", "notion", "工具", "插件", "效率", "markdown", "ppt", "pdf", "文档", "生成器"]):
         theme = "工具"
-    elif has_any(text, ["investment", "finance", "crypto", "投资", "金融", "股票", "基金"]):
+    elif has_any(text, ["investment", "finance", "crypto", "bitcoin", "btc", "投资", "金融", "股票", "基金", "比特币"]):
         theme = "金融"
-    elif has_any(text, ["book", "books", "reading", "八卦", "明星", "书", "阅读", "娱乐"]):
+    elif has_any(text, ["book", "books", "reading", "八卦", "明星", "书", "阅读", "娱乐", "抑郁", "焦虑", "心理"]):
         theme = "文化"
 
     lang = "中文" if has_zh else "英文"
@@ -2456,7 +2892,7 @@ def main() -> None:
     if args.classification == "manual":
         rules_path = Path(args.manual_rules).expanduser().resolve()
         if not rules_path.exists():
-            raise FileNotFoundError(f"manual rules JSON not found: {rules_path}")
+            raise FileNotFoundError(f"manual rules file not found: {rules_path}")
         manual_rules = load_manual_rules(rules_path)
 
     output_root.mkdir(parents=True, exist_ok=True)
@@ -2479,9 +2915,12 @@ def main() -> None:
         rec.domain_parts = normalize_domain_parts(rec.domain_parts)
         rec.domain_tag = domain_tag_from_parts(rec.domain_parts)
 
-    # Auto mode reclassifies entire merged archive, not only new records.
+    # Explicit reclassification applies to the full merged archive, not only new records.
     if args.classification == "auto":
         reclassify_records_auto(merged)
+    elif args.classification == "manual":
+        assert manual_rules is not None
+        reclassify_records_manual(merged, manual_rules)
 
     # File management rules: split oversized leaves with deeper hierarchy.
     rebalance_domains(merged, max_size=MAX_DOMAIN_FILE_SIZE, max_depth=MAX_DOMAIN_DEPTH)
