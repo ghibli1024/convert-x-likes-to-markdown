@@ -112,6 +112,7 @@ X Likes/
 ├── 01 Date/
 ├── 02 Author/
 ├── 03 Domain/
+├── 04 Search/
 └── Dashboard.md
 ```
 
@@ -123,8 +124,28 @@ X Likes/
   Browse notes by author handle/name.
 - `03 Domain/`
   Browse notes by semantic domain/topic hierarchy.
+- `04 Search/`
+  Store query/search result notes generated when you ask the skill to retrieve posts by topic.
 - `Dashboard.md`
   Summary page with counts, top domains, month stats, and quick navigation.
+
+## Search Result Convention
+
+When this skill is used to search an existing `X Likes` archive for a topic, theme, or cluster of posts,
+the default action is to write the result note into:
+
+```text
+X Likes/04 Search/
+```
+
+Recommended helper command:
+
+```bash
+python3 scripts/search_x_likes.py \
+  --xlikes-root "/path/to/X Likes" \
+  --query "telegram cli" \
+  --note-title "Telegram CLI 检索"
+```
 
 ## Modes
 
