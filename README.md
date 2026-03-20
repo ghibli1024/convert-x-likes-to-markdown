@@ -165,6 +165,7 @@ The cleanup logic can read these references:
 - frontmatter `tweet_id`
 
 When the sync skill runs again, any referenced tweet IDs are removed from the generated `01 Date`, `02 Author`, `03 Domain`, and `Dashboard` views.
+After a successful run, the processed contents inside `05 Rubbish/` are cleared, but the folder itself is kept for future use.
 
 ## Modes
 

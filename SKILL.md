@@ -136,7 +136,8 @@ For manual mode, a Markdown note may be used as the classification-rule source. 
 15. Preserve `04 Search/` as the dedicated location for future search/query result notes. If it does not exist yet, create it.
 16. Preserve `05 Rubbish/` as the dedicated location for posts the user wants removed from the archive. If it does not exist yet, create it.
 17. Before writing final views, read `05 Rubbish/` and remove any referenced posts from the merged archive records.
-18. Report counts and key metrics.
+18. After a successful run, clear the contents of `05 Rubbish/` while keeping the folder itself.
+19. Report counts and key metrics.
 
 ## Commands
 
@@ -172,3 +173,4 @@ After running, ensure:
 5. `oversized_leaf_count == 0`.
 6. `01 Date` has no duplicate year folders and no English month folders.
 7. Any posts referenced from `05 Rubbish/` are removed from the generated archive views.
+8. `05 Rubbish/` still exists after the run, but its processed contents are cleared.
