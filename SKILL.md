@@ -63,6 +63,7 @@ Final structure under `XX/X Likes/` (always fixed):
 - `01 Date/`
 - `02 Author/`
 - `03 Domain/`
+- `04 Search/`
 - `Dashboard.md`
 
 Title fallback rule:
@@ -130,7 +131,9 @@ For manual mode, a Markdown note may be used as the classification-rule source. 
 11. Run `scripts/sync_x_likes.py`.
 12. Read JSON summary.
 13. Verify output structure and constraints.
-14. Report counts and key metrics.
+14. Verify `01 Date` uses only four-digit year folders and Chinese numeric month folders such as `3 月`; no duplicate year folders like `2025 2` or English month folders such as `Mar`.
+15. Preserve `04 Search/` as the dedicated location for future search/query result notes. If it does not exist yet, create it.
+16. Report counts and key metrics.
 
 ## Commands
 
@@ -159,8 +162,9 @@ python3 /Users/Totoro/.codex/skills/convert-x-likes-to-markdown/scripts/sync_x_l
 ## Validation Checklist
 
 After running, ensure:
-1. Root contains only `01 Date`, `02 Author`, `03 Domain`, `Dashboard.md`.
+1. Root contains `01 Date`, `02 Author`, `03 Domain`, `04 Search`, `Dashboard.md`.
 2. `final_tweet_notes == final_notes`.
 3. `top_domain_count <= 20`.
 4. `max_domain_depth <= 8`.
 5. `oversized_leaf_count == 0`.
+6. `01 Date` has no duplicate year folders and no English month folders.
