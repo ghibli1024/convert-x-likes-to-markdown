@@ -167,6 +167,7 @@ X Likes/05 Rubbish/
 - frontmatter 里的 `tweet_id`
 
 下次运行 sync skill 时，凡是 `05 Rubbish` 里提到的 tweet，都会从生成出来的 `01 Date`、`02 Author`、`03 Domain` 和 `Dashboard` 视图里删掉。
+成功执行后，`05 Rubbish` 里的已处理内容会被自动清空，但文件夹本身会保留，方便你下次继续使用。
 
 ## 工作模式
 

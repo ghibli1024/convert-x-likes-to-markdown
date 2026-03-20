@@ -301,6 +301,16 @@ def apply_rubbish_filter(records: Dict[str, Record], rubbish_ids: set[str]) -> N
         records.pop(tweet_id, None)
 
 
+def clear_rubbish_folder(root_dir: Path) -> None:
+    rubbish_root = root_dir / root_rubbish_name()
+    rubbish_root.mkdir(parents=True, exist_ok=True)
+    for entry in list(rubbish_root.iterdir()):
+        if entry.is_dir():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+
+
 def parse_yaml_inline_list(value: str) -> List[str]:
     raw = value.strip()
     if not raw.startswith("[") or not raw.endswith("]"):
@@ -3085,6 +3095,7 @@ def main() -> None:
         replace_target(output_root, stage_root)
         normalize_date_tree(output_root / root_date_name())
         md_count, tweet_count = validate_output(output_root, len(merged))
+        clear_rubbish_folder(output_root)
     finally:
         shutil.rmtree(stage_parent, ignore_errors=True)
 
