@@ -29,11 +29,16 @@ class SyncXLikesSearchFolderTests(unittest.TestCase):
             search_dir = root / "04 Search"
             search_dir.mkdir(parents=True)
             (search_dir / "query-result.md").write_text("keep me\n", encoding="utf-8")
+            rubbish_dir = root / "05 Rubbish"
+            rubbish_dir.mkdir(parents=True)
+            (rubbish_dir / "trash.md").write_text("keep me\n", encoding="utf-8")
 
             sync.replace_target(root, stage)
 
             self.assertTrue((root / "04 Search").exists())
             self.assertTrue((root / "04 Search" / "query-result.md").exists())
+            self.assertTrue((root / "05 Rubbish").exists())
+            self.assertTrue((root / "05 Rubbish" / "trash.md").exists())
 
     def test_replace_target_creates_search_folder_when_missing(self):
         sync = self._load_module()
@@ -49,6 +54,7 @@ class SyncXLikesSearchFolderTests(unittest.TestCase):
             sync.replace_target(root, stage)
 
             self.assertTrue((root / "04 Search").exists())
+            self.assertTrue((root / "05 Rubbish").exists())
 
 
 if __name__ == "__main__":
