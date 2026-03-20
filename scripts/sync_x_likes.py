@@ -37,6 +37,7 @@ LANG_PACKS: Dict[str, Dict[str, str]] = {
         "root_date": "01 Date",
         "root_author": "02 Author",
         "root_domain": "03 Domain",
+        "root_search": "04 Search",
         "dashboard_file": "Dashboard.md",
         "index_file": "Index.md",
         "unknown_month": "Unknown Month",
@@ -72,6 +73,7 @@ LANG_PACKS: Dict[str, Dict[str, str]] = {
         "root_date": "01 Date",
         "root_author": "02 Author",
         "root_domain": "03 Domain",
+        "root_search": "04 Search",
         "dashboard_file": "Dashboard.md",
         "index_file": "Index.md",
         "unknown_month": "未知月",
@@ -187,6 +189,10 @@ def root_author_name() -> str:
 
 def root_domain_name() -> str:
     return t("root_domain")
+
+
+def root_search_name() -> str:
+    return t("root_search")
 
 
 def dashboard_name() -> str:
@@ -2839,6 +2845,96 @@ def replace_target(root_dir: Path, stage_root: Path) -> None:
     shutil.copytree(stage_root / root_author_name(), root_dir / root_author_name())
     shutil.copytree(stage_root / root_domain_name(), root_dir / root_domain_name())
     shutil.copy2(stage_root / dashboard_name(), root_dir / dashboard_name())
+    (root_dir / root_search_name()).mkdir(parents=True, exist_ok=True)
+
+
+def strip_duplicate_suffix(name: str) -> str:
+    name = name.strip()
+    match = re.match(r"^(.*?)(?:\s+\d+)$", name)
+    if not match:
+        return name
+    return match.group(1).rstrip()
+
+
+def normalize_year_folder(name: str) -> str:
+    name = strip_duplicate_suffix(name)
+    match = re.match(r"^(\d{4})(?:\s+\d+)?$", name)
+    return match.group(1) if match else name
+
+
+def normalize_month_folder(name: str) -> str:
+    raw = strip_duplicate_suffix(name)
+    month_map = {
+        "jan": "1 月",
+        "feb": "2 月",
+        "mar": "3 月",
+        "apr": "4 月",
+        "may": "5 月",
+        "jun": "6 月",
+        "jul": "7 月",
+        "aug": "8 月",
+        "sep": "9 月",
+        "oct": "10 月",
+        "nov": "11 月",
+        "dec": "12 月",
+    }
+    m = re.match(r"^(\d{1,2})\s*月$", raw)
+    if m:
+        return f"{int(m.group(1))} 月"
+    return month_map.get(raw.lower(), raw)
+
+
+def merge_path_file(source: Path, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not target.exists():
+        shutil.copy2(source, target)
+        return
+    if source.read_text(encoding="utf-8", errors="ignore") == target.read_text(encoding="utf-8", errors="ignore"):
+        return
+    stem = target.stem
+    suffix = target.suffix
+    counter = 2
+    while True:
+        candidate = target.with_name(f"{stem} ({counter}){suffix}")
+        if not candidate.exists():
+            shutil.copy2(source, candidate)
+            return
+        counter += 1
+
+
+def normalize_date_tree(date_root: Path) -> None:
+    if not date_root.exists():
+        return
+
+    year_dirs = [p for p in date_root.iterdir() if p.is_dir()]
+    for year_dir in sorted(year_dirs):
+        canonical_year = normalize_year_folder(year_dir.name)
+        year_target = date_root / canonical_year
+        if year_target != year_dir:
+            year_target.mkdir(parents=True, exist_ok=True)
+            for child in sorted(year_dir.iterdir()):
+                if child.is_file():
+                    merge_path_file(child, year_target / child.name)
+                else:
+                    canonical_month = normalize_month_folder(child.name)
+                    month_target = year_target / canonical_month
+                    month_target.mkdir(parents=True, exist_ok=True)
+                    for item in sorted(child.iterdir()):
+                        if item.is_file():
+                            merge_path_file(item, month_target / item.name)
+            shutil.rmtree(year_dir)
+
+    for year_dir in sorted([p for p in date_root.iterdir() if p.is_dir()]):
+        for month_dir in sorted([p for p in year_dir.iterdir() if p.is_dir()]):
+            canonical_month = normalize_month_folder(month_dir.name)
+            month_target = year_dir / canonical_month
+            if month_target == month_dir:
+                continue
+            month_target.mkdir(parents=True, exist_ok=True)
+            for item in sorted(month_dir.iterdir()):
+                if item.is_file():
+                    merge_path_file(item, month_target / item.name)
+            shutil.rmtree(month_dir)
 
 
 def existing_date_roots(root_dir: Path) -> List[Path]:
@@ -2870,6 +2966,16 @@ def validate_output(root_dir: Path, expected_notes: int) -> Tuple[int, int]:
     if tweet_count != expected_notes:
         raise RuntimeError(
             f"tweet note count mismatch after write: {tweet_count} != expected {expected_notes}"
+        )
+    bad_years = [p.name for p in date_root.iterdir() if p.is_dir() and not re.fullmatch(r"\d{4}", p.name)]
+    bad_months = []
+    for year_dir in [p for p in date_root.iterdir() if p.is_dir()]:
+        for month_dir in [p for p in year_dir.iterdir() if p.is_dir()]:
+            if not re.fullmatch(r"\d{1,2} 月", month_dir.name):
+                bad_months.append(f"{year_dir.name}/{month_dir.name}")
+    if bad_years or bad_months:
+        raise RuntimeError(
+            f"date tree normalization failed; bad_years={bad_years[:10]} bad_months={bad_months[:10]}"
         )
     return md_count, tweet_count
 
@@ -2932,6 +3038,7 @@ def main() -> None:
     try:
         render_result = render_structure(stage_root, merged)
         replace_target(output_root, stage_root)
+        normalize_date_tree(output_root / root_date_name())
         md_count, tweet_count = validate_output(output_root, len(merged))
     finally:
         shutil.rmtree(stage_parent, ignore_errors=True)
