@@ -38,6 +38,7 @@ LANG_PACKS: Dict[str, Dict[str, str]] = {
         "root_author": "02 Author",
         "root_domain": "03 Domain",
         "root_search": "04 Search",
+        "root_rubbish": "05 Rubbish",
         "dashboard_file": "Dashboard.md",
         "index_file": "Index.md",
         "unknown_month": "Unknown Month",
@@ -74,6 +75,7 @@ LANG_PACKS: Dict[str, Dict[str, str]] = {
         "root_author": "02 Author",
         "root_domain": "03 Domain",
         "root_search": "04 Search",
+        "root_rubbish": "05 Rubbish",
         "dashboard_file": "Dashboard.md",
         "index_file": "Index.md",
         "unknown_month": "未知月",
@@ -195,6 +197,10 @@ def root_search_name() -> str:
     return t("root_search")
 
 
+def root_rubbish_name() -> str:
+    return t("root_rubbish")
+
+
 def dashboard_name() -> str:
     return t("dashboard_file")
 
@@ -258,6 +264,41 @@ def parse_frontmatter(text: str) -> Tuple[Dict[str, str], str]:
             val = val[1:-1]
         out[key] = val
     return out, body
+
+
+def collect_rubbish_tweet_ids(root_dir: Path) -> set[str]:
+    rubbish_root = root_dir / root_rubbish_name()
+    if not rubbish_root.exists():
+        return set()
+
+    ids: set[str] = set()
+    status_pat = re.compile(r'https?://(?:twitter\.com|x\.com)/[^)\s"\']+/status/(\d+)')
+    wikilink_pat = re.compile(r"\[\[([^\]|#]+)")
+    tweet_id_pat = re.compile(r'^tweet_id:\s*"?(\d+)"?$', re.M)
+
+    for md in rubbish_root.rglob("*.md"):
+        text = md.read_text(encoding="utf-8", errors="ignore")
+        for m in tweet_id_pat.finditer(text):
+            ids.add(m.group(1))
+        for m in status_pat.finditer(text):
+            ids.add(m.group(1))
+        for m in wikilink_pat.finditer(text):
+            target = m.group(1).strip()
+            if not target.startswith(root_date_name() + "/"):
+                continue
+            note = root_dir / f"{target}.md"
+            if not note.exists():
+                continue
+            note_text = note.read_text(encoding="utf-8", errors="ignore")
+            note_match = tweet_id_pat.search(note_text)
+            if note_match:
+                ids.add(note_match.group(1))
+    return ids
+
+
+def apply_rubbish_filter(records: Dict[str, Record], rubbish_ids: set[str]) -> None:
+    for tweet_id in rubbish_ids:
+        records.pop(tweet_id, None)
 
 
 def parse_yaml_inline_list(value: str) -> List[str]:
@@ -2846,6 +2887,7 @@ def replace_target(root_dir: Path, stage_root: Path) -> None:
     shutil.copytree(stage_root / root_domain_name(), root_dir / root_domain_name())
     shutil.copy2(stage_root / dashboard_name(), root_dir / dashboard_name())
     (root_dir / root_search_name()).mkdir(parents=True, exist_ok=True)
+    (root_dir / root_rubbish_name()).mkdir(parents=True, exist_ok=True)
 
 
 def strip_duplicate_suffix(name: str) -> str:
@@ -3016,6 +3058,9 @@ def main() -> None:
         merged = dict(existing)
         merged.update(incoming)
 
+    rubbish_ids = collect_rubbish_tweet_ids(output_root)
+    apply_rubbish_filter(merged, rubbish_ids)
+
     # Always normalize domain names to merge semantically equivalent categories.
     for rec in merged.values():
         rec.domain_parts = normalize_domain_parts(rec.domain_parts)
@@ -3051,6 +3096,7 @@ def main() -> None:
         "title_language": args.title_language,
         "existing_before": len(existing),
         "incoming": len(incoming),
+        "rubbish_removed": len(rubbish_ids),
         "final_notes": len(merged),
         "final_tweet_notes": tweet_count,
         "final_md_files_under_date": md_count,

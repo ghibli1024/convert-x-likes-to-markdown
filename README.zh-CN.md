@@ -115,6 +115,7 @@ X Likes/
 ├── 02 Author/
 ├── 03 Domain/
 ├── 04 Search/
+├── 05 Rubbish/
 └── Dashboard.md
 ```
 
@@ -128,6 +129,8 @@ X Likes/
   按语义领域或主题层级浏览点赞笔记。
 - `04 Search/`
   存放以后按主题/话题检索帖子时生成的结果页。
+- `05 Rubbish/`
+  存放你明确不想保留在 X Likes 归档里的帖子引用。下次运行 skill 时，会按这里提到的帖子把它们从归档视图中删掉。
 - `Dashboard.md`
   总览页，包含数量统计、月份分布、领域分布和导航入口。
 
@@ -148,6 +151,22 @@ python3 scripts/search_x_likes.py \
   --query "telegram cli" \
   --note-title "Telegram CLI 检索"
 ```
+
+## Rubbish 约定
+
+如果你想把某些帖子从归档里移除，就把相关引用放到：
+
+```text
+X Likes/05 Rubbish/
+```
+
+当前清理逻辑能识别这些引用方式：
+
+- 指向 `01 Date/...` 的 wikilink
+- 原始 `twitter.com/.../status/<id>` 或 `x.com/.../status/<id>` 链接
+- frontmatter 里的 `tweet_id`
+
+下次运行 sync skill 时，凡是 `05 Rubbish` 里提到的 tweet，都会从生成出来的 `01 Date`、`02 Author`、`03 Domain` 和 `Dashboard` 视图里删掉。
 
 ## 工作模式
 

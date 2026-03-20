@@ -64,6 +64,7 @@ Final structure under `XX/X Likes/` (always fixed):
 - `02 Author/`
 - `03 Domain/`
 - `04 Search/`
+- `05 Rubbish/`
 - `Dashboard.md`
 
 Title fallback rule:
@@ -133,7 +134,9 @@ For manual mode, a Markdown note may be used as the classification-rule source. 
 13. Verify output structure and constraints.
 14. Verify `01 Date` uses only four-digit year folders and Chinese numeric month folders such as `3 月`; no duplicate year folders like `2025 2` or English month folders such as `Mar`.
 15. Preserve `04 Search/` as the dedicated location for future search/query result notes. If it does not exist yet, create it.
-16. Report counts and key metrics.
+16. Preserve `05 Rubbish/` as the dedicated location for posts the user wants removed from the archive. If it does not exist yet, create it.
+17. Before writing final views, read `05 Rubbish/` and remove any referenced posts from the merged archive records.
+18. Report counts and key metrics.
 
 ## Commands
 
@@ -162,9 +165,10 @@ python3 /Users/Totoro/.codex/skills/convert-x-likes-to-markdown/scripts/sync_x_l
 ## Validation Checklist
 
 After running, ensure:
-1. Root contains `01 Date`, `02 Author`, `03 Domain`, `04 Search`, `Dashboard.md`.
+1. Root contains `01 Date`, `02 Author`, `03 Domain`, `04 Search`, `05 Rubbish`, `Dashboard.md`.
 2. `final_tweet_notes == final_notes`.
 3. `top_domain_count <= 20`.
 4. `max_domain_depth <= 8`.
 5. `oversized_leaf_count == 0`.
 6. `01 Date` has no duplicate year folders and no English month folders.
+7. Any posts referenced from `05 Rubbish/` are removed from the generated archive views.

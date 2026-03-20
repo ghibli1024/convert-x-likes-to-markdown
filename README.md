@@ -113,6 +113,7 @@ X Likes/
 ├── 02 Author/
 ├── 03 Domain/
 ├── 04 Search/
+├── 05 Rubbish/
 └── Dashboard.md
 ```
 
@@ -126,6 +127,8 @@ X Likes/
   Browse notes by semantic domain/topic hierarchy.
 - `04 Search/`
   Store query/search result notes generated when you ask the skill to retrieve posts by topic.
+- `05 Rubbish/`
+  Store notes that reference posts you no longer want to keep in the X Likes archive. Any referenced posts will be removed from generated views the next time the sync skill runs.
 - `Dashboard.md`
   Summary page with counts, top domains, month stats, and quick navigation.
 
@@ -146,6 +149,22 @@ python3 scripts/search_x_likes.py \
   --query "telegram cli" \
   --note-title "Telegram CLI 检索"
 ```
+
+## Rubbish Convention
+
+If you want to remove posts from the archive, add a Markdown note under:
+
+```text
+X Likes/05 Rubbish/
+```
+
+The cleanup logic can read these references:
+
+- wikilinks to notes under `01 Date/...`
+- raw `twitter.com/.../status/<id>` or `x.com/.../status/<id>` URLs
+- frontmatter `tweet_id`
+
+When the sync skill runs again, any referenced tweet IDs are removed from the generated `01 Date`, `02 Author`, `03 Domain`, and `Dashboard` views.
 
 ## Modes
 
