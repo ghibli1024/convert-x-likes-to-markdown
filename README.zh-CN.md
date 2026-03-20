@@ -114,6 +114,7 @@ X Likes/
 ├── 01 Date/
 ├── 02 Author/
 ├── 03 Domain/
+├── 04 Search/
 └── Dashboard.md
 ```
 
@@ -125,8 +126,28 @@ X Likes/
   按作者账号浏览点赞笔记。
 - `03 Domain/`
   按语义领域或主题层级浏览点赞笔记。
+- `04 Search/`
+  存放以后按主题/话题检索帖子时生成的结果页。
 - `Dashboard.md`
   总览页，包含数量统计、月份分布、领域分布和导航入口。
+
+## Search 结果约定
+
+以后当这个 skill 被用来从现有 `X Likes` 归档中按主题、话题或关键词检索帖子时，
+默认动作是把检索结果写入：
+
+```text
+X Likes/04 Search/
+```
+
+推荐辅助命令：
+
+```bash
+python3 scripts/search_x_likes.py \
+  --xlikes-root "/path/to/X Likes" \
+  --query "telegram cli" \
+  --note-title "Telegram CLI 检索"
+```
 
 ## 工作模式
 
