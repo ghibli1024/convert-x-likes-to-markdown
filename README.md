@@ -17,6 +17,40 @@ The output is plain Markdown, but the structure is optimized for Obsidian-style 
 - domain/topic-based views
 - a dashboard for summary stats
 
+## Quickstart
+
+### 1) Export Likes JSON
+
+Follow [How To Get The Input JSON](#how-to-get-the-input-json).
+
+### 2) Create a new archive
+
+```bash
+python3 scripts/sync_x_likes.py \
+  --input-json "/path/to/likes.json" \
+  --target-root "/path/to/output" \
+  --mode create \
+  --classification auto \
+  --title-language en
+```
+
+This creates:
+
+```text
+/path/to/output/X Likes/
+```
+
+### 3) Merge new likes later
+
+```bash
+python3 scripts/sync_x_likes.py \
+  --input-json "/path/to/new-likes.json" \
+  --target-root "/path/to/output" \
+  --mode merge \
+  --classification auto \
+  --title-language en
+```
+
 ## What It Does
 
 Given an exported X Likes JSON file, the tool can:
@@ -35,7 +69,9 @@ Given an exported X Likes JSON file, the tool can:
 
 ```text
 convert-x-likes-to-markdown/
+├── LICENSE
 ├── README.md
+├── README.zh-CN.md
 ├── SKILL.md
 ├── .gitignore
 ├── agents/
@@ -43,13 +79,15 @@ convert-x-likes-to-markdown/
 ├── references/
 │   ├── domain-policy.md
 │   └── manual-rules.example.json
+├── tests/
 └── scripts/
+    ├── search_x_likes.py
     └── sync_x_likes.py
 ```
 
 ## Requirements
 
-- Python 3
+- Python 3.8+
 - an exported X Likes JSON file
 
 No external Python dependencies are required.
@@ -377,6 +415,29 @@ python3 scripts/sync_x_likes.py \
 - The archive is editor-agnostic Markdown. Obsidian is a target, not a hard dependency.
 - Auto mode is best when you want broad semantic grouping with minimal setup.
 - Manual mode is best when you already know your preferred taxonomy, especially if it already exists as a Markdown note.
+
+## Testing
+
+This repo uses Python's built-in `unittest`.
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+## Security / Privacy
+
+- This project does not scrape X directly; it starts from a JSON export you provide.
+- The scripts do not require network access to run and write everything to your local filesystem.
+- Treat your exported likes JSON as sensitive personal data.
+
+## Troubleshooting
+
+- Missing likes in the output:
+  You likely did not scroll far enough before exporting. The exporter can only capture what the X web app loaded in your browser.
+- `--classification manual` with a Markdown taxonomy note:
+  `--manual-rules` accepts either a JSON rules file (`.json`) or a Markdown classification note (`.md`).
+- Want a clean rebuild:
+  Use `--mode create` (and point `--target-root` at an empty folder if you want to avoid mixing with an existing archive).
 
 ## License / Reuse
 
