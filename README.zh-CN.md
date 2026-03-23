@@ -17,6 +17,40 @@
 - 按领域/主题浏览
 - 通过仪表盘查看整体统计
 
+## 快速开始
+
+### 1）先导出 Likes JSON
+
+先按下方的 [如何获得输入 JSON](#如何获得输入-json) 拿到导出文件。
+
+### 2）首次创建归档
+
+```bash
+python3 scripts/sync_x_likes.py \
+  --input-json "/path/to/likes.json" \
+  --target-root "/path/to/output" \
+  --mode create \
+  --classification auto \
+  --title-language en
+```
+
+这会生成：
+
+```text
+/path/to/output/X Likes/
+```
+
+### 3）后续增量合并
+
+```bash
+python3 scripts/sync_x_likes.py \
+  --input-json "/path/to/new-likes.json" \
+  --target-root "/path/to/output" \
+  --mode merge \
+  --classification auto \
+  --title-language en
+```
+
 ## 项目作用
 
 给定一份 X Likes 导出的 JSON 文件，这个工具可以：
@@ -45,13 +79,15 @@ convert-x-likes-to-markdown/
 ├── references/
 │   ├── domain-policy.md
 │   └── manual-rules.example.json
+├── tests/
 └── scripts/
+    ├── search_x_likes.py
     └── sync_x_likes.py
 ```
 
 ## 运行要求
 
-- Python 3
+- Python 3.8+
 - 一份导出的 X Likes JSON 文件
 
 不需要额外安装第三方 Python 依赖。
@@ -379,6 +415,29 @@ python3 scripts/sync_x_likes.py \
 - 输出是编辑器无关的 Markdown，Obsidian 只是重点目标之一
 - `auto` 适合希望少配置、快速获得大致语义归类的场景
 - `manual` 适合已经有明确分类体系的场景，尤其是这套体系本来就存在于一份 Markdown 笔记中
+
+## 测试
+
+这个仓库使用 Python 内置的 `unittest`。
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+## 安全 / 隐私
+
+- 这个项目不会直接抓取 X；它的输入是一份你自己提供的导出 JSON。
+- 脚本默认不需要网络访问，所有输出都写到你的本地文件系统。
+- 你的 likes JSON 可能包含个人偏好与敏感信息，请把它当成私有数据处理。
+
+## 故障排查
+
+- 输出里缺少点赞：
+  很可能是导出前没有把网页滚动到足够多的内容。导出器只能拿到浏览器里已经加载的数据。
+- `--classification manual` 配合 Markdown 分类笔记：
+  `--manual-rules` 同时接受 JSON 规则文件（`.json`）和 Markdown 分类笔记（`.md`）。
+- 想做一次干净重建：
+  使用 `--mode create`；如果不想和旧归档混在一起，最好让 `--target-root` 指向一个空目录。
 
 ## 许可证
 
