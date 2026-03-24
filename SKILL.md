@@ -23,6 +23,8 @@ Collect and confirm all of these before running:
 
 Do not assume defaults for `merge/create` or `auto/manual`.
 
+When the user has already selected `mode=merge` and is continuing the same intake flow or updating an existing archive, treat the current repository and the last confirmed answers in this session as the default for any later field the user does not explicitly restate. Only ask again when a later choice is genuinely ambiguous, conflicts with the existing archive, or changes the output structure.
+
 When the skill is triggered, do not jump straight to conversion. First tell the user exactly which inputs are required and what the allowed options are.
 
 Use a compact intake checklist that includes:
@@ -38,6 +40,19 @@ Use a compact intake checklist that includes:
 - `confirm`: explicit execution confirmation such as `run`.
 
 Default interaction style: ask for the required inputs in a short one-question-at-a-time flow. For each question, state the allowed options inline when relevant.
+
+For fields with a small fixed choice set such as `mode`, `classification`, `title-language`, and final confirmation:
+- default to a choice-style prompt instead of a bare freeform question
+- show each allowed option with a brief explanation of what it changes
+- if the environment supports structured prompt-box choices, use them
+- otherwise emulate the same behavior in plain text by listing the options compactly and telling the user they can reply with just the option value
+- if the current Codex session mode does not expose structured prompt-box choices, explicitly tell the user that text replies are required in this session and keep the interaction one-question-at-a-time
+
+For path fields such as `JSON path`, `target-root`, `auto-note`, and `manual-source`:
+- when there is an obvious detected candidate, present it as the proposed value and ask for confirmation
+- when multiple plausible candidates exist, show the short candidate list and ask the user to choose or paste another absolute path
+
+Once intake has started, do not keep re-sending the entire checklist unless the user asks. Ask only the next unresolved field, and prefer prompts that feel like quick selections in the input box rather than a form the user has to reconstruct manually.
 
 Recommended question order:
 1. Confirm or collect `input-json`.
@@ -64,7 +79,6 @@ Final structure under `XX/X Likes/` (always fixed):
 - `02 Author/`
 - `03 Domain/`
 - `04 Search/`
-- `05 Rubbish/`
 - `Dashboard.md`
 
 Title fallback rule:
@@ -120,24 +134,23 @@ For manual mode, a Markdown note may be used as the classification-rule source. 
 ## Workflow
 
 1. Present the required-input checklist and collect answers in a one-question-at-a-time flow by default.
-2. Confirm user decisions.
-3. If the user supplied `/X Likes` instead of `target-root`, normalize to the parent directory and confirm the interpretation.
-4. If the user points to an existing archive/repository and the task is `merge`, inspect that archive before running so you understand its current language and classification structure.
-5. In merge/update flows, state back that the existing repository structure will be preserved and used as the classification reference unless the user explicitly asks for a different structure.
-6. If `classification=auto`, automatically use the established default Markdown classification note for the workspace or conversation; do not ask for another rule source unless needed to disambiguate.
-7. If `classification=manual`, collect a Markdown source from the user, either pasted inline or via another Markdown path.
-8. If the rule source is Markdown, parse or transform it into executable rules before running `scripts/sync_x_likes.py`.
-9. If the user explicitly asks to reclassify both new and existing posts with the chosen rule source, honor that request and say that the old structure will be rewritten to match that source.
-10. If the user is actively testing the skill and requests behavior changes, update this skill first.
-11. Run `scripts/sync_x_likes.py`.
-12. Read JSON summary.
-13. Verify output structure and constraints.
-14. Verify `01 Date` uses only four-digit year folders and Chinese numeric month folders such as `3 月`; no duplicate year folders like `2025 2` or English month folders such as `Mar`.
-15. Preserve `04 Search/` as the dedicated location for future search/query result notes. If it does not exist yet, create it.
-16. Preserve `05 Rubbish/` as the dedicated location for posts the user wants removed from the archive. If it does not exist yet, create it.
-17. Before writing final views, read `05 Rubbish/` and remove any referenced posts from the merged archive records.
-18. After a successful run, clear the contents of `05 Rubbish/` while keeping the folder itself.
-19. Report counts and key metrics.
+2. For enum-like fields, default to showing compact selectable options with a one-line explanation for each option.
+3. If structured prompt-box choices are unavailable, simulate them in plain text and let the user answer with only the option value.
+4. Confirm user decisions.
+5. If the user supplied `/X Likes` instead of `target-root`, normalize to the parent directory and confirm the interpretation.
+6. If the user points to an existing archive/repository and the task is `merge`, inspect that archive before running so you understand its current language and classification structure.
+7. In merge/update flows, state back that the existing repository structure will be preserved and used as the classification reference unless the user explicitly asks for a different structure. If the user has already confirmed some fields in the current intake, carry those forward for any later fields the user leaves implicit instead of re-asking for them.
+8. If `classification=auto`, automatically use the established default Markdown classification note for the workspace or conversation; do not ask for another rule source unless needed to disambiguate.
+9. If `classification=manual`, collect a Markdown source from the user, either pasted inline or via another Markdown path.
+10. If the rule source is Markdown, parse or transform it into executable rules before running `scripts/sync_x_likes.py`.
+11. If the user explicitly asks to reclassify both new and existing posts with the chosen rule source, honor that request and say that the old structure will be rewritten to match that source.
+12. If the user is actively testing the skill and requests behavior changes, update this skill first.
+13. Run `scripts/sync_x_likes.py`.
+14. Read JSON summary.
+15. Verify output structure and constraints.
+16. Verify `01 Date` uses only four-digit year folders and Chinese numeric month folders such as `3 月`; no duplicate year folders like `2025 2` or English month folders such as `Mar`.
+17. Preserve `04 Search/` as the dedicated location for future search/query result notes. If it does not exist yet, create it.
+18. Report counts and key metrics.
 
 ## Commands
 
@@ -166,11 +179,9 @@ python3 /Users/Totoro/.codex/skills/convert-x-likes-to-markdown/scripts/sync_x_l
 ## Validation Checklist
 
 After running, ensure:
-1. Root contains `01 Date`, `02 Author`, `03 Domain`, `04 Search`, `05 Rubbish`, `Dashboard.md`.
+1. Root contains `01 Date`, `02 Author`, `03 Domain`, `04 Search`, `Dashboard.md`.
 2. `final_tweet_notes == final_notes`.
 3. `top_domain_count <= 20`.
 4. `max_domain_depth <= 8`.
 5. `oversized_leaf_count == 0`.
 6. `01 Date` has no duplicate year folders and no English month folders.
-7. Any posts referenced from `05 Rubbish/` are removed from the generated archive views.
-8. `05 Rubbish/` still exists after the run, but its processed contents are cleared.

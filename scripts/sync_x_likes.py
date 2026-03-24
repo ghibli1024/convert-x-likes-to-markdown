@@ -2425,6 +2425,32 @@ def rebalance_domains(records: Dict[str, Record], max_size: int = MAX_DOMAIN_FIL
                     force_changed = True
         if not force_changed:
             break
+
+    by_leaf = {}
+    for rec in records.values():
+        leaf = tuple(rec.domain_parts or ["其他"])
+        by_leaf.setdefault(leaf, []).append(rec)
+
+    oversized = [(leaf, rows) for leaf, rows in by_leaf.items() if len(rows) > max_size]
+    for leaf, rows in oversized:
+        ordered_rows = sorted(
+            rows,
+            key=lambda r: (
+                (r.created_at[:10] if re.match(r"^\d{4}-\d{2}-\d{2}", r.created_at) else "1970-01-01"),
+                r.tweet_id,
+            ),
+            reverse=True,
+        )
+        for idx, rec in enumerate(ordered_rows):
+            shard_num = idx // max_size + 1
+            if len(leaf) < max_depth:
+                new_parts = normalize_domain_parts(list(leaf) + [f"分片 {shard_num}"])
+            else:
+                new_parts = normalize_domain_parts(list(leaf[:-1]) + [f"{leaf[-1]} 分片 {shard_num}"])
+            if new_parts != rec.domain_parts:
+                rec.domain_parts = new_parts
+                rec.domain_tag = domain_tag_from_parts(new_parts)
+
     top_domains = sorted({(rec.domain_parts[0] if rec.domain_parts else "其他") for rec in records.values()})
     if len(top_domains) > MAX_TOP_LEVEL_DOMAINS:
         keep = set(TOP_DOMAIN_ORDER[:MAX_TOP_LEVEL_DOMAINS])
@@ -2883,14 +2909,16 @@ def replace_target(root_dir: Path, stage_root: Path) -> None:
         removable.add(cfg["dashboard_file"])
         removable.add(cfg["index_file"])
 
-    for name in sorted(removable):
-        p = root_dir / name
-        if not p.exists():
-            continue
-        if p.is_dir():
-            shutil.rmtree(p)
-        else:
-            p.unlink()
+    if root_dir.exists():
+        for entry in sorted(root_dir.iterdir(), key=lambda p: p.name):
+            # Clean up legacy root entries with stray leading/trailing spaces,
+            # e.g. "03 Domain ", which Obsidian renders like the canonical name.
+            if entry.name not in removable and entry.name.strip() not in removable:
+                continue
+            if entry.is_dir():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
 
     shutil.copytree(stage_root / root_date_name(), root_dir / root_date_name())
     shutil.copytree(stage_root / root_author_name(), root_dir / root_author_name())
@@ -2992,6 +3020,12 @@ def normalize_date_tree(date_root: Path) -> None:
 def existing_date_roots(root_dir: Path) -> List[Path]:
     names = {cfg["root_date"] for cfg in LANG_PACKS.values()} | {"01 Date", "01 日期"}
     roots = [root_dir / n for n in sorted(names) if (root_dir / n).exists()]
+    if roots:
+        return roots
+    if root_dir.exists():
+        for entry in sorted(root_dir.iterdir(), key=lambda p: p.name):
+            if entry.is_dir() and entry.name.strip() in names:
+                roots.append(entry)
     if not roots:
         fallback = root_dir / root_date_name()
         if fallback.exists():
