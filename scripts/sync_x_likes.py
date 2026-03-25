@@ -2909,21 +2909,31 @@ def replace_target(root_dir: Path, stage_root: Path) -> None:
         removable.add(cfg["dashboard_file"])
         removable.add(cfg["index_file"])
 
-    if root_dir.exists():
-        for entry in sorted(root_dir.iterdir(), key=lambda p: p.name):
-            # Clean up legacy root entries with stray leading/trailing spaces,
-            # e.g. "03 Domain ", which Obsidian renders like the canonical name.
-            if entry.name not in removable and entry.name.strip() not in removable:
-                continue
-            if entry.is_dir():
-                shutil.rmtree(entry)
-            else:
-                entry.unlink()
+    backup_dir = Path(tempfile.mkdtemp(prefix="xlikes-replace-"))
+    try:
+        root_dir.mkdir(parents=True, exist_ok=True)
+        if root_dir.exists():
+            for entry in sorted(root_dir.iterdir(), key=lambda p: p.name):
+                normalized_name = strip_duplicate_suffix(entry.name)
+                # Move managed roots out of the iCloud-synced tree first, then swap the
+                # freshly rendered roots in with directory renames. This avoids a large
+                # copy storm under iCloud Drive, which is prone to leaving empty
+                # conflict-style folders such as "2026 2" or "AI 3".
+                if (
+                    entry.name not in removable
+                    and entry.name.strip() not in removable
+                    and normalized_name not in removable
+                ):
+                    continue
+                shutil.move(str(entry), str(backup_dir / entry.name))
 
-    shutil.copytree(stage_root / root_date_name(), root_dir / root_date_name())
-    shutil.copytree(stage_root / root_author_name(), root_dir / root_author_name())
-    shutil.copytree(stage_root / root_domain_name(), root_dir / root_domain_name())
-    shutil.copy2(stage_root / dashboard_name(), root_dir / dashboard_name())
+        shutil.move(str(stage_root / root_date_name()), str(root_dir / root_date_name()))
+        shutil.move(str(stage_root / root_author_name()), str(root_dir / root_author_name()))
+        shutil.move(str(stage_root / root_domain_name()), str(root_dir / root_domain_name()))
+        shutil.move(str(stage_root / dashboard_name()), str(root_dir / dashboard_name()))
+    finally:
+        shutil.rmtree(backup_dir, ignore_errors=True)
+
     (root_dir / root_search_name()).mkdir(parents=True, exist_ok=True)
     (root_dir / root_rubbish_name()).mkdir(parents=True, exist_ok=True)
 
@@ -2962,6 +2972,23 @@ def normalize_month_folder(name: str) -> str:
     if m:
         return f"{int(m.group(1))} 月"
     return month_map.get(raw.lower(), raw)
+
+
+def cleanup_empty_duplicate_dirs(root_dir: Path) -> None:
+    if not root_dir.exists():
+        return
+
+    dirs = sorted(
+        [p for p in root_dir.rglob("*") if p.is_dir()],
+        key=lambda p: len(p.parts),
+        reverse=True,
+    )
+    for path in dirs:
+        if any(path.iterdir()):
+            continue
+        if strip_duplicate_suffix(path.name) == path.name:
+            continue
+        path.rmdir()
 
 
 def merge_path_file(source: Path, target: Path) -> None:
@@ -3128,6 +3155,8 @@ def main() -> None:
         render_result = render_structure(stage_root, merged)
         replace_target(output_root, stage_root)
         normalize_date_tree(output_root / root_date_name())
+        cleanup_empty_duplicate_dirs(output_root / root_date_name())
+        cleanup_empty_duplicate_dirs(output_root / root_domain_name())
         md_count, tweet_count = validate_output(output_root, len(merged))
         clear_rubbish_folder(output_root)
     finally:
