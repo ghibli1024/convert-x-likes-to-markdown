@@ -137,6 +137,8 @@ The output is always written under:
 <target-root>/<container-name>/
 ```
 
+On macOS, if `target-root` resolves under `~/Library/Mobile Documents/`, the tool first builds the managed archive in a local workspace under `$CODEX_HOME/state/convert-x-likes-to-markdown/<target-hash>/` and then publishes it into the requested target. This keeps iCloud/File Provider targets more stable while preserving `04 Search/` and `05 Rubbish/` in the target archive.
+
 Default `container-name`:
 
 ```text

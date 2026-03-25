@@ -54,6 +54,8 @@ For path fields such as `JSON path`, `target-root`, `auto-note`, and `manual-sou
 
 Once intake has started, do not keep re-sending the entire checklist unless the user asks. Ask only the next unresolved field, and prefer prompts that feel like quick selections in the input box rather than a form the user has to reconstruct manually.
 
+If `target-root` resolves inside macOS iCloud Drive (`~/Library/Mobile Documents/...`), keep treating the user-specified target archive as the source of truth, but internally build the managed output under `$CODEX_HOME/state/convert-x-likes-to-markdown/<target-hash>/` first and then publish it into the target archive. Do not expose this as a new required option. Preserve `04 Search/` and `05 Rubbish/` in the target archive.
+
 Recommended question order:
 1. Confirm or collect `input-json`.
 2. Confirm or collect `target-root`.

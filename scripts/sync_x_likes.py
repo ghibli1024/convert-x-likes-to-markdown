@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -167,6 +168,32 @@ def parse_args() -> argparse.Namespace:
         help="Path to manual classification rules JSON (required when --classification manual)",
     )
     return parser.parse_args()
+
+
+def codex_home_path() -> Path:
+    return Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser().resolve()
+
+
+def managed_state_root() -> Path:
+    return codex_home_path() / "state" / "convert-x-likes-to-markdown"
+
+
+def is_icloud_target_root(target_root: Path) -> bool:
+    resolved = target_root.expanduser().resolve()
+    mobile_documents_root = (Path.home() / "Library" / "Mobile Documents").expanduser().resolve()
+    try:
+        resolved.relative_to(mobile_documents_root)
+        return True
+    except ValueError:
+        return False
+
+
+def local_build_root_for_target(target_root: Path, container_name: str) -> Optional[Path]:
+    if not is_icloud_target_root(target_root):
+        return None
+    target_hash = hashlib.sha1(str(target_root.expanduser().resolve()).encode("utf-8")).hexdigest()[:16]
+    safe_container = sanitize_filename(container_name) or "X Likes"
+    return managed_state_root() / target_hash / safe_container
 
 
 def set_active_language(lang: str) -> None:
@@ -3147,9 +3174,17 @@ def main() -> None:
     # File management rules: split oversized leaves with deeper hierarchy.
     rebalance_domains(merged, max_size=MAX_DOMAIN_FILE_SIZE, max_depth=MAX_DOMAIN_DEPTH)
 
-    stage_parent = Path(tempfile.mkdtemp(prefix="xlikes-sync-"))
-    stage_root = stage_parent / "X Likes"
-    stage_root.mkdir(parents=True, exist_ok=True)
+    local_build_root = local_build_root_for_target(target_root, args.container_name)
+    if local_build_root is not None:
+        stage_parent = local_build_root.parent
+        if local_build_root.exists():
+            shutil.rmtree(local_build_root)
+        local_build_root.mkdir(parents=True, exist_ok=True)
+        stage_root = local_build_root
+    else:
+        stage_parent = Path(tempfile.mkdtemp(prefix="xlikes-sync-"))
+        stage_root = stage_parent / args.container_name
+        stage_root.mkdir(parents=True, exist_ok=True)
 
     try:
         render_result = render_structure(stage_root, merged)
@@ -3160,7 +3195,8 @@ def main() -> None:
         md_count, tweet_count = validate_output(output_root, len(merged))
         clear_rubbish_folder(output_root)
     finally:
-        shutil.rmtree(stage_parent, ignore_errors=True)
+        if local_build_root is None:
+            shutil.rmtree(stage_parent, ignore_errors=True)
 
     summary = {
         "input_json": str(input_json),

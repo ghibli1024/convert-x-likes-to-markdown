@@ -137,6 +137,8 @@ python3 scripts/sync_x_likes.py \
 <target-root>/<container-name>/
 ```
 
+在 macOS 上，如果 `target-root` 解析后位于 `~/Library/Mobile Documents/` 下，工具会先在本地工作目录 `$CODEX_HOME/state/convert-x-likes-to-markdown/<target-hash>/` 中构建受管归档，再发布到你指定的目标目录。这样可以减少 iCloud/File Provider 目标上的目录冲突，同时仍然保留目标目录里的 `04 Search/` 和 `05 Rubbish/`。
+
 默认 `container-name`：
 
 ```text
