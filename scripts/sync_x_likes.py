@@ -175,7 +175,7 @@ def codex_home_path() -> Path:
 
 
 def managed_state_root() -> Path:
-    return codex_home_path() / "state" / "convert-x-likes-to-markdown"
+    return codex_home_path() / "state" / "x-to-obsidian"
 
 
 def is_icloud_target_root(target_root: Path) -> bool:
@@ -2525,7 +2525,7 @@ def build_note_text(
             f"bookmark_count: {record.bookmark_count}",
             f"views_count: {record.views_count}",
             "tags: [" + ", ".join(quote_yaml(t) for t in tags) + "]",
-            f"imported_at: {quote_yaml('generated-by-convert-x-likes-to-markdown')}",
+            f"imported_at: {quote_yaml('generated-by-x-to-obsidian')}",
             "---",
             "",
             f"# {title}",

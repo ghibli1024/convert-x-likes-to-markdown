@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 
-SYNC_SCRIPT = Path("/Users/Totoro/Desktop/convert-x-likes-to-markdown/scripts/sync_x_likes.py")
+SYNC_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "sync_x_likes.py"
 
 
 class SyncXLikesSearchFolderTests(unittest.TestCase):

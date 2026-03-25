@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-SYNC_SCRIPT = Path("/Users/Totoro/Desktop/convert-x-likes-to-markdown/scripts/sync_x_likes.py")
+SYNC_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "sync_x_likes.py"
 
 
 class SyncXLikesICloudPublishModeTests(unittest.TestCase):
@@ -47,7 +47,7 @@ class SyncXLikesICloudPublishModeTests(unittest.TestCase):
                 actual = sync.local_build_root_for_target(icloud_target, "X Likes")
 
             expected_hash = hashlib.sha1(str(icloud_target.expanduser().resolve()).encode("utf-8")).hexdigest()[:16]
-            expected = Path(codex_home).resolve() / "state" / "convert-x-likes-to-markdown" / expected_hash / "X Likes"
+            expected = Path(codex_home).resolve() / "state" / "x-to-obsidian" / expected_hash / "X Likes"
             self.assertEqual(actual, expected)
 
     def test_local_build_root_for_target_is_none_for_non_icloud_targets(self):

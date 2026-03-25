@@ -1,9 +1,9 @@
-# convert-x-likes-to-markdown
+# X to Ob
 
 [![README-English](https://img.shields.io/badge/README-English-2d6cdf?style=for-the-badge)](README.md)
 [![README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87](https://img.shields.io/badge/README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555555?style=for-the-badge)](README.zh-CN.md)
 
-Convert an exported X (Twitter) Likes JSON file into a local Markdown archive.
+Convert an exported X (Twitter) Likes JSON file into an Obsidian-ready local Markdown archive.
 
 This repository contains both:
 
@@ -68,7 +68,7 @@ Given an exported X Likes JSON file, the tool can:
 ## Repository Layout
 
 ```text
-convert-x-likes-to-markdown/
+x-to-obsidian/
 ├── LICENSE
 ├── README.md
 ├── README.zh-CN.md
@@ -137,7 +137,7 @@ The output is always written under:
 <target-root>/<container-name>/
 ```
 
-On macOS, if `target-root` resolves under `~/Library/Mobile Documents/`, the tool first builds the managed archive in a local workspace under `$CODEX_HOME/state/convert-x-likes-to-markdown/<target-hash>/` and then publishes it into the requested target. This keeps iCloud/File Provider targets more stable while preserving `04 Search/` and `05 Rubbish/` in the target archive.
+On macOS, if `target-root` resolves under `~/Library/Mobile Documents/`, the tool first builds the managed archive in a local workspace under `$CODEX_HOME/state/x-to-obsidian/<target-hash>/` and then publishes it into the requested target. This keeps iCloud/File Provider targets more stable while preserving `04 Search/` and `05 Rubbish/` in the target archive.
 
 Default `container-name`:
 

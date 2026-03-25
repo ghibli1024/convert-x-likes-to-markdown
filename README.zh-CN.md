@@ -1,9 +1,9 @@
-# convert-x-likes-to-markdown
+# X to Ob
 
 [![README-English](https://img.shields.io/badge/README-English-555555?style=for-the-badge)](README.md)
 [![README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87](https://img.shields.io/badge/README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-2d6cdf?style=for-the-badge)](README.zh-CN.md)
 
-把 X（Twitter）点赞导出 JSON 转换成一个本地 Markdown 归档。
+把 X（Twitter）点赞导出 JSON 转换成一个适合 Obsidian 的本地 Markdown 归档。
 
 这个仓库同时包含两部分：
 
@@ -68,7 +68,7 @@ python3 scripts/sync_x_likes.py \
 ## 仓库结构
 
 ```text
-convert-x-likes-to-markdown/
+x-to-obsidian/
 ├── README.md
 ├── README.zh-CN.md
 ├── LICENSE
@@ -137,7 +137,7 @@ python3 scripts/sync_x_likes.py \
 <target-root>/<container-name>/
 ```
 
-在 macOS 上，如果 `target-root` 解析后位于 `~/Library/Mobile Documents/` 下，工具会先在本地工作目录 `$CODEX_HOME/state/convert-x-likes-to-markdown/<target-hash>/` 中构建受管归档，再发布到你指定的目标目录。这样可以减少 iCloud/File Provider 目标上的目录冲突，同时仍然保留目标目录里的 `04 Search/` 和 `05 Rubbish/`。
+在 macOS 上，如果 `target-root` 解析后位于 `~/Library/Mobile Documents/` 下，工具会先在本地工作目录 `$CODEX_HOME/state/x-to-obsidian/<target-hash>/` 中构建受管归档，再发布到你指定的目标目录。这样可以减少 iCloud/File Provider 目标上的目录冲突，同时仍然保留目标目录里的 `04 Search/` 和 `05 Rubbish/`。
 
 默认 `container-name`：
 

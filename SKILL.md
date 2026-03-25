@@ -1,9 +1,9 @@
 ---
-name: convert-x-likes-to-markdown
-description: Convert X (Twitter) likes JSON exports into a locally stored, classified Markdown archive (Obsidian-friendly but editor-agnostic), with user-controlled merge/create and auto/manual classification.
+name: x-to-obsidian
+description: Convert X (Twitter) likes JSON exports into an Obsidian-ready local Markdown archive, with user-controlled merge/create and auto/manual classification.
 ---
 
-# X Likes Markdown Sync
+# X to Ob
 
 ## Overview
 
@@ -54,7 +54,7 @@ For path fields such as `JSON path`, `target-root`, `auto-note`, and `manual-sou
 
 Once intake has started, do not keep re-sending the entire checklist unless the user asks. Ask only the next unresolved field, and prefer prompts that feel like quick selections in the input box rather than a form the user has to reconstruct manually.
 
-If `target-root` resolves inside macOS iCloud Drive (`~/Library/Mobile Documents/...`), keep treating the user-specified target archive as the source of truth, but internally build the managed output under `$CODEX_HOME/state/convert-x-likes-to-markdown/<target-hash>/` first and then publish it into the target archive. Do not expose this as a new required option. Preserve `04 Search/` and `05 Rubbish/` in the target archive.
+If `target-root` resolves inside macOS iCloud Drive (`~/Library/Mobile Documents/...`), keep treating the user-specified target archive as the source of truth, but internally build the managed output under `$CODEX_HOME/state/x-to-obsidian/<target-hash>/` first and then publish it into the target archive. Do not expose this as a new required option. Preserve `04 Search/` and `05 Rubbish/` in the target archive.
 
 Recommended question order:
 1. Confirm or collect `input-json`.
@@ -158,7 +158,7 @@ For manual mode, a Markdown note may be used as the classification-rule source. 
 
 Auto:
 ```bash
-python3 /Users/Totoro/.codex/skills/convert-x-likes-to-markdown/scripts/sync_x_likes.py \
+python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
   --input-json "/path/to/export.json" \
   --target-root "/path/to/xx" \
   --mode merge \
@@ -169,7 +169,7 @@ python3 /Users/Totoro/.codex/skills/convert-x-likes-to-markdown/scripts/sync_x_l
 
 Manual:
 ```bash
-python3 /Users/Totoro/.codex/skills/convert-x-likes-to-markdown/scripts/sync_x_likes.py \
+python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
   --input-json "/path/to/export.json" \
   --target-root "/path/to/xx" \
   --mode create \
