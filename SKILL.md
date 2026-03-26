@@ -151,8 +151,9 @@ For manual mode, a Markdown note may be used as the classification-rule source. 
 14. Read JSON summary.
 15. Verify output structure and constraints.
 16. Verify `01 Date` uses only four-digit year folders and Chinese numeric month folders such as `3 月`; no duplicate year folders like `2025 2` or English month folders such as `Mar`.
-17. Preserve `04 Search/` as the dedicated location for future search/query result notes. If it does not exist yet, create it.
-18. Report counts and key metrics.
+17. Repair duplicate-suffix folders or files caused by sync or iCloud conflicts, including date roots like `2025 2`, domain roots like `AI 2`, and stale dashboard files like `Dashboard 2.md`, by merging contents back into the canonical target and removing the suffixed duplicate.
+18. Preserve `04 Search/` as the dedicated location for future search/query result notes. If it does not exist yet, create it.
+19. Report counts and key metrics.
 
 ## Commands
 
@@ -187,3 +188,5 @@ After running, ensure:
 4. `max_domain_depth <= 8`.
 5. `oversized_leaf_count == 0`.
 6. `01 Date` has no duplicate year folders and no English month folders.
+7. `03 Domain` has no duplicate top-level folders with numeric suffixes such as `AI 2`.
+8. Root has no duplicate dashboard files with numeric suffixes such as `Dashboard 2.md`.

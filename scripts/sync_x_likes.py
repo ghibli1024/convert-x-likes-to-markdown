@@ -2967,10 +2967,11 @@ def replace_target(root_dir: Path, stage_root: Path) -> None:
 
 def strip_duplicate_suffix(name: str) -> str:
     name = name.strip()
-    match = re.match(r"^(.*?)(?:\s+\d+)$", name)
+    match = re.match(r"^(.*?)(?:\s+\d+)(\.[^.]+)?$", name)
     if not match:
         return name
-    return match.group(1).rstrip()
+    suffix = match.group(2) or ""
+    return match.group(1).rstrip() + suffix
 
 
 def normalize_year_folder(name: str) -> str:
@@ -3011,10 +3012,15 @@ def cleanup_empty_duplicate_dirs(root_dir: Path) -> None:
         reverse=True,
     )
     for path in dirs:
-        if any(path.iterdir()):
+        children = list(path.iterdir())
+        visible_children = [child for child in children if not child.name.startswith(".")]
+        if visible_children:
             continue
         if strip_duplicate_suffix(path.name) == path.name:
             continue
+        for child in children:
+            if child.is_file():
+                child.unlink()
         path.rmdir()
 
 
@@ -3036,6 +3042,16 @@ def merge_path_file(source: Path, target: Path) -> None:
         counter += 1
 
 
+def merge_dir_tree(source: Path, target: Path) -> None:
+    target.mkdir(parents=True, exist_ok=True)
+    for item in sorted(source.iterdir()):
+        dest = target / item.name
+        if item.is_dir():
+            merge_dir_tree(item, dest)
+        else:
+            merge_path_file(item, dest)
+
+
 def normalize_date_tree(date_root: Path) -> None:
     if not date_root.exists():
         return
@@ -3052,10 +3068,7 @@ def normalize_date_tree(date_root: Path) -> None:
                 else:
                     canonical_month = normalize_month_folder(child.name)
                     month_target = year_target / canonical_month
-                    month_target.mkdir(parents=True, exist_ok=True)
-                    for item in sorted(child.iterdir()):
-                        if item.is_file():
-                            merge_path_file(item, month_target / item.name)
+                    merge_dir_tree(child, month_target)
             shutil.rmtree(year_dir)
 
     for year_dir in sorted([p for p in date_root.iterdir() if p.is_dir()]):
@@ -3064,11 +3077,21 @@ def normalize_date_tree(date_root: Path) -> None:
             month_target = year_dir / canonical_month
             if month_target == month_dir:
                 continue
-            month_target.mkdir(parents=True, exist_ok=True)
-            for item in sorted(month_dir.iterdir()):
-                if item.is_file():
-                    merge_path_file(item, month_target / item.name)
+            merge_dir_tree(month_dir, month_target)
             shutil.rmtree(month_dir)
+
+
+def normalize_domain_tree(domain_root: Path) -> None:
+    if not domain_root.exists():
+        return
+
+    for top_dir in sorted([p for p in domain_root.iterdir() if p.is_dir()]):
+        canonical_name = strip_duplicate_suffix(top_dir.name)
+        target_dir = domain_root / canonical_name
+        if target_dir == top_dir:
+            continue
+        merge_dir_tree(top_dir, target_dir)
+        shutil.rmtree(top_dir)
 
 
 def existing_date_roots(root_dir: Path) -> List[Path]:
@@ -3190,6 +3213,7 @@ def main() -> None:
         render_result = render_structure(stage_root, merged)
         replace_target(output_root, stage_root)
         normalize_date_tree(output_root / root_date_name())
+        normalize_domain_tree(output_root / root_domain_name())
         cleanup_empty_duplicate_dirs(output_root / root_date_name())
         cleanup_empty_duplicate_dirs(output_root / root_domain_name())
         md_count, tweet_count = validate_output(output_root, len(merged))
