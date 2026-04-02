@@ -22,16 +22,25 @@ import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+import taxonomy_reference as taxonomy
+
 
 MAX_DOMAIN_FILE_SIZE = 100
 MAX_DOMAIN_DEPTH = 8
 MAX_TOP_LEVEL_DOMAINS = 20
+ROOT_TAXONOMY_FILENAME = "ROOT分类目录.md"
+DEFAULT_ROOT_TAXONOMY_PATH = Path(__file__).resolve().parent.parent / "references" / ROOT_TAXONOMY_FILENAME
 
 LANG_PACKS: Dict[str, Dict[str, str]] = {
     "en": {
@@ -240,8 +249,81 @@ def index_stem() -> str:
     return Path(index_name()).stem
 
 
+def root_taxonomy_path(output_root: Path) -> Path:
+    return output_root / root_domain_name() / ROOT_TAXONOMY_FILENAME
+
+
+def is_ai_outline_taxonomy_markdown(path: Path) -> bool:
+    if path.suffix.lower() != ".md" or not path.exists():
+        return False
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return any(line.strip() == "FORMAT: AI_OUTLINE_V1" for line in lines[:20])
+
+
+def resolve_manual_rules_path(output_root: Path, manual_rules_arg: Optional[str]) -> Path:
+    if manual_rules_arg:
+        return Path(manual_rules_arg).expanduser().resolve()
+
+    local_taxonomy = root_taxonomy_path(output_root)
+    if local_taxonomy.exists():
+        return local_taxonomy.resolve()
+
+    return DEFAULT_ROOT_TAXONOMY_PATH.resolve()
+
+
+def ensure_local_root_taxonomy(output_root: Path, source_path: Path, rules: Dict[str, object]) -> None:
+    if str(rules.get("rule_source_format", "")) != "taxonomy_ai_outline":
+        return
+    destination = root_taxonomy_path(output_root)
+    if source_path.resolve() == destination.resolve():
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_path, destination)
+
+
+def classify_record_with_taxonomy(
+    title: str,
+    content: str,
+    source: str,
+    reference: taxonomy.TaxonomyReference,
+    existing_domain_parts: Optional[Sequence[str]] = None,
+) -> List[str]:
+    host = normalize_host(source)
+    source_category_paths = [list(existing_domain_parts)] if existing_domain_parts else [[]]
+    record = {
+        "title": title,
+        "content": content,
+        "url": source,
+        "host": host,
+        "source_category_paths": source_category_paths,
+        "category_paths": source_category_paths,
+    }
+    semantic_path, _ = taxonomy.classify_record_semantically(record, reference)
+    return [part for part in semantic_path if part and part != reference.root_label]
+
+
 def fallback_post_title(tweet_id: str) -> str:
     return f"{t('fallback_post_prefix')} {tweet_id[-6:]}"
+
+
+def detect_archive_language(output_root: Path) -> str:
+    dashboard = output_root / dashboard_name()
+    if dashboard.exists():
+        text = dashboard.read_text(encoding="utf-8", errors="ignore")
+        if "X 喜欢仪表盘" in text or "月份统计" in text or "领域统计" in text:
+            return "zh"
+        if "X Likes Dashboard" in text or "Month Stats" in text or "Domain Stats" in text:
+            return "en"
+
+    for date_root in existing_date_roots(output_root):
+        for child in date_root.rglob("*"):
+            if not child.is_dir():
+                continue
+            if child.name.endswith("月"):
+                return "zh"
+            if child.name in MONTH_NAMES_EN:
+                return "en"
+    return "en"
 
 
 def month_number(date_str: str) -> int:
@@ -336,6 +418,45 @@ def clear_rubbish_folder(root_dir: Path) -> None:
             shutil.rmtree(entry)
         else:
             entry.unlink()
+
+
+def cleanup_duplicate_suffix_files(root_dir: Path) -> None:
+    if not root_dir.exists():
+        return
+    files = sorted(
+        [p for p in root_dir.rglob("*") if p.is_file()],
+        key=lambda p: (len(p.parts), str(p)),
+        reverse=True,
+    )
+    for path in files:
+        canonical_name = strip_duplicate_suffix(path.name)
+        if canonical_name == path.name:
+            continue
+        canonical = path.with_name(canonical_name)
+        if not canonical.exists():
+            path.replace(canonical)
+            continue
+        path.unlink()
+
+
+def cleanup_root_duplicate_files(root_dir: Path) -> None:
+    if not root_dir.exists():
+        return
+    for child in list(root_dir.iterdir()):
+        if child.is_dir():
+            continue
+        canonical_name = strip_duplicate_suffix(child.name)
+        if canonical_name == child.name:
+            continue
+        canonical = child.with_name(canonical_name)
+        if not canonical.exists():
+            child.replace(canonical)
+            continue
+        child.unlink()
+
+
+def normalize_author_tree(author_root: Path) -> None:
+    cleanup_duplicate_suffix_files(author_root)
 
 
 def parse_yaml_inline_list(value: str) -> List[str]:
@@ -1632,7 +1753,26 @@ def build_manual_rules_from_markdown(path: Path) -> Dict[str, object]:
 
 
 def load_manual_rules(path: Path) -> Dict[str, object]:
-    if path.suffix.lower() == ".md":
+    if is_ai_outline_taxonomy_markdown(path):
+        reference = taxonomy.parse_taxonomy_reference_markdown(path)
+        top_domains = reference.children_by_parent.get((reference.root_label,), [])
+        data = {
+            "fallback_domain": "/".join(top_domains[:1]) if top_domains else "其他",
+            "top_domains": top_domains,
+            "taxonomy_reference": reference,
+            "taxonomy_classifier": lambda title, content, source, existing_domain_parts=None: classify_record_with_taxonomy(
+                title,
+                content,
+                source,
+                reference,
+                existing_domain_parts=existing_domain_parts,
+            ),
+            "rule_source": str(path),
+            "rule_source_format": "taxonomy_ai_outline",
+        }
+        register_manual_top_domains(data)
+        return data
+    elif path.suffix.lower() == ".md":
         data = build_manual_rules_from_markdown(path)
     else:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -1651,7 +1791,15 @@ def manual_classify(
     source: str,
     rules: Dict[str, object],
     media_lines: Optional[Sequence[str]] = None,
+    existing_domain_parts: Optional[Sequence[str]] = None,
 ) -> Tuple[List[str], str, List[str]]:
+    if str(rules.get("rule_source_format", "")) == "taxonomy_ai_outline":
+        classifier = rules.get("taxonomy_classifier")
+        if not callable(classifier):
+            raise ValueError("taxonomy manual rules missing classifier")
+        parts = normalize_domain_parts(classifier(title, content, source, existing_domain_parts))
+        return parts, domain_tag_from_parts(parts), []
+
     media_lines = list(media_lines or [])
     raw_text = f"{title}\n{content}\n{source}\n" + "\n".join(media_lines)
     text = raw_text.lower()
@@ -1907,7 +2055,14 @@ def reclassify_records_auto(records: Dict[str, Record]) -> None:
 
 def reclassify_records_manual(records: Dict[str, Record], rules: Dict[str, object]) -> None:
     for rec in records.values():
-        parts, tag, topics = manual_classify(rec.title, rec.content, rec.source, rules, rec.media_lines)
+        parts, tag, topics = manual_classify(
+            rec.title,
+            rec.content,
+            rec.source,
+            rules,
+            rec.media_lines,
+            existing_domain_parts=rec.domain_parts,
+        )
         rec.domain_parts = normalize_domain_parts(parts)
         rec.domain_tag = domain_tag_from_parts(rec.domain_parts) if not tag.startswith("domain/") else tag
         rec.topic_tags = sorted(set(topics))
@@ -2751,11 +2906,27 @@ def render_structure(stage_root: Path, records: Dict[str, Record]) -> Dict[str, 
 
     domain_items = sorted(by_domain.items(), key=lambda kv: (-len(kv[1]), kv[0]))
     top_domain_counter: Dict[str, int] = {}
+    by_domain_parts: Dict[Tuple[str, ...], List[Dict[str, object]]] = {}
+
+    # Parent indexes for any hierarchical levels.
+    parent_children: Dict[Tuple[str, ...], Dict[Tuple[str, ...], int]] = {}
+    for domain_key, rows in domain_items:
+        parts = normalize_domain_parts([p for p in domain_key.split("/") if p])
+        by_domain_parts[tuple(parts)] = rows
+        top = parts[0]
+        top_domain_counter[top] = top_domain_counter.get(top, 0) + len(rows)
+        for i in range(1, len(parts)):
+            parent = tuple(parts[:i])
+            child = tuple(parts[: i + 1])
+            parent_children.setdefault(parent, {})
+            parent_children[parent][child] = parent_children[parent].get(child, 0) + len(rows)
+
+    parent_keys = set(parent_children.keys())
 
     for domain_key, rows in domain_items:
         parts = normalize_domain_parts([p for p in domain_key.split("/") if p])
-        top = parts[0]
-        top_domain_counter[top] = top_domain_counter.get(top, 0) + len(rows)
+        if tuple(parts) in parent_keys:
+            continue
 
         rows.sort(key=lambda r: (str(r["created_at"]), str(r["tweet_id"])), reverse=True)
         by_ym: Dict[Tuple[str, int], List[Dict[str, object]]] = {}
@@ -2787,31 +2958,33 @@ def render_structure(stage_root: Path, records: Dict[str, Record]) -> Dict[str, 
             lines.append("")
         domain_file.write_text("\n".join(lines), encoding="utf-8")
 
-    # Parent indexes for any hierarchical levels.
-    parent_children: Dict[Tuple[str, ...], Dict[Tuple[str, ...], int]] = {}
-    for domain_key, rows in domain_items:
-        parts = normalize_domain_parts([p for p in domain_key.split("/") if p])
-        for i in range(1, len(parts)):
-            parent = tuple(parts[:i])
-            child = tuple(parts[: i + 1])
-            parent_children.setdefault(parent, {})
-            parent_children[parent][child] = parent_children[parent].get(child, 0) + len(rows)
-
     for parent, child_map in sorted(parent_children.items(), key=lambda kv: kv[0]):
         child_entries = sorted(child_map.items(), key=lambda kv: (-kv[1], "/".join(kv[0])))
         parent_path = domain_parent_index_path(domain_root, list(parent))
+        direct_rows = sorted(
+            by_domain_parts.get(parent, []),
+            key=lambda r: (str(r["created_at"]), str(r["tweet_id"])),
+            reverse=True,
+        )
         lines = [
             "---",
             f"domain: {quote_yaml('/'.join(parent))}",
-            f"count: {sum(cnt for _, cnt in child_entries)}",
+            f"count: {len(direct_rows) + sum(cnt for _, cnt in child_entries)}",
             'tags: ["x-like", "index/domain"]',
             "---",
             "",
             f"# {'/'.join(localize_domain_parts(parent))}",
             "",
+        ]
+        if direct_rows:
+            lines.extend([f"## {t('section_notes')}", ""])
+            for row in direct_rows:
+                lines.append(f"- [[{row['rel_path']}|{row['title']}]]")
+            lines.append("")
+        lines.extend([
             f"## {t('section_subcategories')}",
             "",
-        ]
+        ])
         for child, cnt in child_entries:
             child_name = "/".join(localize_domain_parts(child[len(parent) :]))
             if len(child_name) == 0:
@@ -2840,7 +3013,6 @@ def render_structure(stage_root: Path, records: Dict[str, Record]) -> Dict[str, 
         "",
     ]
 
-    parent_keys = set(parent_children.keys())
     for top, cnt in top_domains_sorted:
         top_display = localize_domain_part(top)
         if (top,) in parent_keys:
@@ -3154,15 +3326,13 @@ def main() -> None:
     if not input_json.exists():
         raise FileNotFoundError(f"input JSON not found: {input_json}")
 
-    if args.classification == "manual" and not args.manual_rules:
-        raise ValueError("--manual-rules is required when --classification manual")
-
+    manual_rules_path: Optional[Path] = None
     manual_rules = None
     if args.classification == "manual":
-        rules_path = Path(args.manual_rules).expanduser().resolve()
-        if not rules_path.exists():
-            raise FileNotFoundError(f"manual rules file not found: {rules_path}")
-        manual_rules = load_manual_rules(rules_path)
+        manual_rules_path = resolve_manual_rules_path(output_root, args.manual_rules)
+        if not manual_rules_path.exists():
+            raise FileNotFoundError(f"manual rules file not found: {manual_rules_path}")
+        manual_rules = load_manual_rules(manual_rules_path)
 
     output_root.mkdir(parents=True, exist_ok=True)
 
@@ -3212,8 +3382,12 @@ def main() -> None:
     try:
         render_result = render_structure(stage_root, merged)
         replace_target(output_root, stage_root)
+        if manual_rules_path is not None and manual_rules is not None:
+            ensure_local_root_taxonomy(output_root, manual_rules_path, manual_rules)
         normalize_date_tree(output_root / root_date_name())
+        normalize_author_tree(output_root / root_author_name())
         normalize_domain_tree(output_root / root_domain_name())
+        cleanup_root_duplicate_files(output_root)
         cleanup_empty_duplicate_dirs(output_root / root_date_name())
         cleanup_empty_duplicate_dirs(output_root / root_domain_name())
         md_count, tweet_count = validate_output(output_root, len(merged))
@@ -3228,6 +3402,7 @@ def main() -> None:
         "mode": args.mode,
         "classification": args.classification,
         "title_language": args.title_language,
+        "manual_rules_source": str(manual_rules_path) if manual_rules_path is not None else "",
         "existing_before": len(existing),
         "incoming": len(incoming),
         "rubbish_removed": len(rubbish_ids),

@@ -17,7 +17,7 @@ Collect and confirm all of these before running:
 2. Target root `XX` (output at `XX/X Likes/`).
 3. Write mode: `merge` or `create`.
 4. Classification mode: `auto` or `manual`.
-5. Manual classification source if `manual` (either pasted into the input box or given as another Markdown note path).
+5. Manual classification source if `manual` and no local `03 Domain/ROOT分类目录.md` is available (either pasted into the input box or given as another Markdown note path).
 6. Title language: `en` or `zh` (controls generated note labels/month names/domain display names; top-level root names stay fixed).
 7. Final execution confirmation.
 
@@ -33,7 +33,7 @@ Use a compact intake checklist that includes:
 - `mode`: `merge` or `create`.
 - `classification`: `auto` or `manual`.
 - `auto-note`: only when `classification=auto`; do not ask the user to fill this in if a preferred Markdown classification note is already established for the workspace or conversation. Use that note automatically. Example: an already-designated note such as `文件夹目录索引.md`.
-- `manual-source`: required only when `classification=manual`; otherwise allow blank. Accept either:
+- `manual-source`: required only when `classification=manual` and neither `X Likes/03 Domain/ROOT分类目录.md` nor an explicit rules path is available; otherwise allow blank. Accept either:
   - pasted Markdown classification content in the input box
   - an absolute path to another Markdown classification note
 - `title-language`: `en` or `zh`.
@@ -81,6 +81,7 @@ Final structure under `XX/X Likes/` (always fixed):
 - `02 Author/`
 - `03 Domain/`
 - `04 Search/`
+- `03 Domain/ROOT分类目录.md`
 - `Dashboard.md`
 
 Title fallback rule:
@@ -133,6 +134,15 @@ For manual mode, a Markdown note may be used as the classification-rule source. 
 - if the user pasted the source inline, write it to a temporary Markdown note or parse it directly before execution; do not make the user create a file unless they asked
 - when the user explicitly asks to reclassify the existing archive with the new manual rules, allow the new taxonomy to replace the previous repository structure
 
+If the Markdown note contains `FORMAT: AI_OUTLINE_V1`, treat it as a `ROOT分类目录.md` taxonomy instead of the older hardcoded Markdown label map. In that case:
+- classify into the taxonomy tree semantically using title, full text, source URL, and host
+- map results directly into `03 Domain/` hierarchy
+- preserve the fixed root structure of `X Likes`
+- prefer rule-source priority:
+  1. explicit `--manual-rules`
+  2. `X Likes/03 Domain/ROOT分类目录.md`
+  3. `references/default_root_taxonomy.md`
+
 ## Workflow
 
 1. Present the required-input checklist and collect answers in a one-question-at-a-time flow by default.
@@ -143,7 +153,7 @@ For manual mode, a Markdown note may be used as the classification-rule source. 
 6. If the user points to an existing archive/repository and the task is `merge`, inspect that archive before running so you understand its current language and classification structure.
 7. In merge/update flows, state back that the existing repository structure will be preserved and used as the classification reference unless the user explicitly asks for a different structure. If the user has already confirmed some fields in the current intake, carry those forward for any later fields the user leaves implicit instead of re-asking for them.
 8. If `classification=auto`, automatically use the established default Markdown classification note for the workspace or conversation; do not ask for another rule source unless needed to disambiguate.
-9. If `classification=manual`, collect a Markdown source from the user, either pasted inline or via another Markdown path.
+9. If `classification=manual`, first look for `X Likes/03 Domain/ROOT分类目录.md`; only ask for another source if no local taxonomy exists and no explicit path was given.
 10. If the rule source is Markdown, parse or transform it into executable rules before running `scripts/sync_x_likes.py`.
 11. If the user explicitly asks to reclassify both new and existing posts with the chosen rule source, honor that request and say that the old structure will be rewritten to match that source.
 12. If the user is actively testing the skill and requests behavior changes, update this skill first.
@@ -151,7 +161,7 @@ For manual mode, a Markdown note may be used as the classification-rule source. 
 14. Read JSON summary.
 15. Verify output structure and constraints.
 16. Verify `01 Date` uses only four-digit year folders and Chinese numeric month folders such as `3 月`; no duplicate year folders like `2025 2` or English month folders such as `Mar`.
-17. Repair duplicate-suffix folders or files caused by sync or iCloud conflicts, including date roots like `2025 2`, domain roots like `AI 2`, and stale dashboard files like `Dashboard 2.md`, by merging contents back into the canonical target and removing the suffixed duplicate.
+17. Repair duplicate-suffix folders or files caused by sync or iCloud conflicts, including date roots like `2025 2`, author files like `alice 2.md`, domain roots like `AI 2`, and stale dashboard files like `Dashboard 2.md`, by merging contents back into the canonical target and removing the suffixed duplicate.
 18. Preserve `04 Search/` as the dedicated location for future search/query result notes. If it does not exist yet, create it.
 19. Report counts and key metrics.
 
@@ -168,7 +178,7 @@ python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
   --title-language en
 ```
 
-Manual:
+Manual with explicit rules:
 ```bash
 python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
   --input-json "/path/to/export.json" \
@@ -176,6 +186,16 @@ python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
   --mode create \
   --classification manual \
   --manual-rules "/path/to/user-provided-classification-note.md" \
+  --title-language zh
+```
+
+Manual with local taxonomy fallback:
+```bash
+python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
+  --input-json "/path/to/export.json" \
+  --target-root "/path/to/xx" \
+  --mode merge \
+  --classification manual \
   --title-language zh
 ```
 
