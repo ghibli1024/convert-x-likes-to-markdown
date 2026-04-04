@@ -3,7 +3,7 @@
 Sync X likes JSON exports into a local Markdown archive (Obsidian-friendly).
 
 Output structure under: <target-root>/<container-name>/
-- fixed top-level folders/files: 01 Date, 02 Author, 03 Domain, Dashboard.md
+- fixed top-level folders/files: 01 Date, 02 Author, 03 Domain, 04 Search, 05 Rubbish, Dashboard.md
 
 Modes:
 - merge: upsert JSON into an existing archive and rebuild indexes
@@ -410,6 +410,13 @@ def apply_rubbish_filter(records: Dict[str, Record], rubbish_ids: set[str]) -> N
         records.pop(tweet_id, None)
 
 
+def ensure_rubbish_placeholder(root_dir: Path) -> None:
+    rubbish_root = root_dir / root_rubbish_name()
+    rubbish_root.mkdir(parents=True, exist_ok=True)
+    placeholder = rubbish_root / ".keep"
+    placeholder.write_text("managed-by=x-to-obsidian\n", encoding="utf-8")
+
+
 def clear_rubbish_folder(root_dir: Path) -> None:
     rubbish_root = root_dir / root_rubbish_name()
     rubbish_root.mkdir(parents=True, exist_ok=True)
@@ -418,6 +425,7 @@ def clear_rubbish_folder(root_dir: Path) -> None:
             shutil.rmtree(entry)
         else:
             entry.unlink()
+    ensure_rubbish_placeholder(root_dir)
 
 
 def cleanup_duplicate_suffix_files(root_dir: Path) -> None:
@@ -3134,7 +3142,7 @@ def replace_target(root_dir: Path, stage_root: Path) -> None:
         shutil.rmtree(backup_dir, ignore_errors=True)
 
     (root_dir / root_search_name()).mkdir(parents=True, exist_ok=True)
-    (root_dir / root_rubbish_name()).mkdir(parents=True, exist_ok=True)
+    ensure_rubbish_placeholder(root_dir)
 
 
 def strip_duplicate_suffix(name: str) -> str:
@@ -3312,6 +3320,13 @@ def validate_output(root_dir: Path, expected_notes: int) -> Tuple[int, int]:
         raise RuntimeError(
             f"date tree normalization failed; bad_years={bad_years[:10]} bad_months={bad_months[:10]}"
         )
+    if not (root_dir / root_search_name()).exists():
+        raise RuntimeError(f"missing required root: {root_search_name()}")
+    rubbish_root = root_dir / root_rubbish_name()
+    if not rubbish_root.exists():
+        raise RuntimeError(f"missing required root: {root_rubbish_name()}")
+    if not (rubbish_root / ".keep").exists():
+        raise RuntimeError(f"missing rubbish placeholder file: {rubbish_root / '.keep'}")
     return md_count, tweet_count
 
 

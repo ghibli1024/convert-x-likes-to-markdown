@@ -81,6 +81,7 @@ Final structure under `XX/X Likes/` (always fixed):
 - `02 Author/`
 - `03 Domain/`
 - `04 Search/`
+- `05 Rubbish/`
 - `03 Domain/ROOT分类目录.md`
 - `Dashboard.md`
 
@@ -163,7 +164,8 @@ If the Markdown note contains `FORMAT: AI_OUTLINE_V1`, treat it as a `ROOT分类
 16. Verify `01 Date` uses only four-digit year folders and Chinese numeric month folders such as `3 月`; no duplicate year folders like `2025 2` or English month folders such as `Mar`.
 17. Repair duplicate-suffix folders or files caused by sync or iCloud conflicts, including date roots like `2025 2`, author files like `alice 2.md`, domain roots like `AI 2`, and stale dashboard files like `Dashboard 2.md`, by merging contents back into the canonical target and removing the suffixed duplicate.
 18. Preserve `04 Search/` as the dedicated location for future search/query result notes. If it does not exist yet, create it.
-19. Report counts and key metrics.
+19. Preserve `05 Rubbish/` as a stable managed root. Do not create a visible helper note inside it. If it would otherwise be empty, use a hidden internal placeholder file so the folder remains visible in iCloud/Obsidian flows.
+20. Report counts and key metrics.
 
 ## Commands
 
@@ -202,7 +204,7 @@ python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
 ## Validation Checklist
 
 After running, ensure:
-1. Root contains `01 Date`, `02 Author`, `03 Domain`, `04 Search`, `Dashboard.md`.
+1. Root contains `01 Date`, `02 Author`, `03 Domain`, `04 Search`, `05 Rubbish`, `Dashboard.md`.
 2. `final_tweet_notes == final_notes`.
 3. `top_domain_count <= 20`.
 4. `max_domain_depth <= 8`.
@@ -210,3 +212,4 @@ After running, ensure:
 6. `01 Date` has no duplicate year folders and no English month folders.
 7. `03 Domain` has no duplicate top-level folders with numeric suffixes such as `AI 2`.
 8. Root has no duplicate dashboard files with numeric suffixes such as `Dashboard 2.md`.
+9. `05 Rubbish/` exists and does not expose a visible helper note; if needed for persistence, only a hidden internal placeholder file may be present.

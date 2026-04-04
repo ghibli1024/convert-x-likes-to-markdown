@@ -108,7 +108,7 @@ class SyncXLikesRubbishCleanupTests(unittest.TestCase):
 
         self.assertEqual(set(merged.keys()), {"456"})
 
-    def test_clear_rubbish_folder_keeps_folder_but_removes_contents(self):
+    def test_clear_rubbish_folder_keeps_folder_with_hidden_placeholder(self):
         sync = self._load_module()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "X Likes"
@@ -121,7 +121,7 @@ class SyncXLikesRubbishCleanupTests(unittest.TestCase):
             sync.clear_rubbish_folder(root)
 
             self.assertTrue(rubbish.exists())
-            self.assertEqual(list(rubbish.iterdir()), [])
+            self.assertEqual(sorted(path.name for path in rubbish.iterdir()), [".keep"])
 
 
 if __name__ == "__main__":

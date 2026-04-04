@@ -221,6 +221,34 @@ PRIMARY_GOAL: taxonomy test
         self.assertTrue((output_root / "03 Domain" / "ROOT分类目录.md").exists())
         self.assertFalse((output_root / "ROOT分类目录.md").exists())
 
+    def test_clear_rubbish_folder_leaves_hidden_placeholder_file(self):
+        output_root = self.temp_dir / "X Likes"
+        rubbish_root = output_root / "05 Rubbish"
+        rubbish_root.mkdir(parents=True, exist_ok=True)
+        (rubbish_root / "old-note.md").write_text("tweet_id: 123\n", encoding="utf-8")
+
+        self.sync.clear_rubbish_folder(output_root)
+
+        self.assertTrue(rubbish_root.exists())
+        self.assertTrue((rubbish_root / ".keep").exists())
+        self.assertEqual(
+            sorted(path.name for path in rubbish_root.iterdir()),
+            [".keep"],
+        )
+
+    def test_replace_target_recreates_rubbish_root_with_hidden_placeholder(self):
+        output_root = self.temp_dir / "X Likes"
+        stage_root = self.temp_dir / "stage"
+        (stage_root / "01 Date").mkdir(parents=True, exist_ok=True)
+        (stage_root / "02 Author").mkdir(parents=True, exist_ok=True)
+        (stage_root / "03 Domain").mkdir(parents=True, exist_ok=True)
+        (stage_root / "Dashboard.md").write_text("# Dashboard\n", encoding="utf-8")
+
+        self.sync.replace_target(output_root, stage_root)
+
+        self.assertTrue((output_root / "05 Rubbish").exists())
+        self.assertTrue((output_root / "05 Rubbish" / ".keep").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
